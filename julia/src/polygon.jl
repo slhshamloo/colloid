@@ -109,7 +109,8 @@ end
 
 @inline function apply_periodic_boundary!(poly::AbstractPolygon,
         boxsize::Tuple{Vararg{<:Real}})
-    
+    poly.center .= (poly.center .+ boxsize) .% boxsize
+    poly.vertices .= (poly.vertices .+ boxsize) .% boxsize
 end
 
 """
@@ -119,7 +120,8 @@ Check whether or not `poly1` and `poly2` are is_overlapping. The function is opt
 for even polygons.
 """
 function is_overlapping(poly1::AbstractPolygon, poly2::AbstractPolygon)
-    centerdist = √sum(^(2), poly1.center - poly2.center)
+    centerdist = √((poly1.center[1] - poly2.center[1])^2
+        + (poly1.center[2] - poly2.center[2])^2)
     if centerdist > poly1.radius + poly2.radius
         return false
     elseif centerdist <= poly1.bisector + poly2.bisector
@@ -137,9 +139,10 @@ Like `is_overlapping`, but for periodic boundary conditions.
 """
 function is_overlapping_periodic(poly1::AbstractPolygon, poly2::AbstractPolygon,
         boxsize::Tuple{Vararg{<:Real}})
-    distvec = (poly1.center - poly2.center)
-    distvec -= (dist .÷ (boxsize ./ 2)) .* boxsize
-    centerdist = √sum(^(2), distvec)
+    distvec = (poly1.center[1] - poly2.center[1], poly1.center[2] - poly2.center[2])
+    distvec -= ((distvec[1] ÷ (boxsize[1] / 2)) .* boxsize[1],
+        (distvec[2] ÷ (boxsize[2] / 2)) .* boxsize[2])
+    centerdist = √(distvec[1]^2 + distvec[2]^2)
 
     if centerdist > poly1.radius + poly2.radius
         return false
@@ -184,30 +187,39 @@ function _is_vertex_overlapping_periodic(refpoly::AbstractPolygon,
     return false
 end
 
+macro vertexdot(vertex, center, normal)
+    quote
+        (($(esc(vertex))[1] - $(esc(center))[1]) * $(esc(normal))[1]
+        + ($(esc(vertex))[2] - $(esc(center))[2]) * $(esc(normal))[2])
+    end
+end
+
 @inline function _is_vertex_outside_normal(refpoly::RegPoly,
         vertex::AbstractVector{<:Real}, normal::AbstractVector{<:Real})
-    return sum((vertex - center) .* normal) > refpoly.bisector
+    return @vertexdot(vertex, refpoly.center, normal) > refpoly.bisector
 end
 
 @inline function _is_vertex_outside_normal(refpoly::RegEvenPoly,
         vertex::AbstractVector{<:Real}, normal::AbstractVector{<:Real})
-    normaldist = sum((vertex - center) .* normal)
+    normaldist = @vertexdot(vertex, refpoly.center, normal)
     return normaldist > refpoly.bisector || normaldist < -refpoly.bisector
 end
 
 @inline function _is_vertex_outside_normal_periodic(refpoly::RegPoly,
         vertex::AbstractVector{<:Real}, normal::AbstractVector{<:Real},
         boxsize::Tuple{Vararg{<:Real}})
-    distvec = vertex - center
-    distvec -= (dist .÷ (boxsize ./ 2)) .* boxsize
-    return sum(distvec .* normal) > refpoly.bisector
+    distvec = (vertex[1] - refpoly.center[1], vertex[2] - refpoly.center[2])
+    distvec = ((distvec[1] ÷ (boxsize[1] / 2)) .* boxsize[1],
+        (distvec[2] ÷ (boxsize[2] / 2)) .* boxsize[2])
+    return distvec[1] * normal[1] + distvec[2] * normal[2] > refpoly.bisector
 end
 
 @inline function _is_vertex_outside_normal_periodic(refpoly::RegEvenPoly,
         vertex::AbstractVector{<:Real}, normal::AbstractVector{<:Real},
         boxsize::Tuple{Vararg{<:Real}})
-    distvec = vertex - center
-    distvec -= (dist .÷ (boxsize ./ 2)) .* boxsize
-    normaldist = sum(distvec .* normal)
+    distvec = (vertex[1] - refpoly.center[1], vertex[2] - refpoly.center[2])
+    distvec = ((distvec[1] ÷ (boxsize[1] / 2)) .* boxsize[1],
+        (distvec[2] ÷ (boxsize[2] / 2)) .* boxsize[2])
+    normaldist = distvec[1] * normal[1] + distvec[2] * normal[2]
     return normaldist > refpoly.bisector || normaldist < -refpoly.bisector
 end
