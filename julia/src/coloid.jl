@@ -41,7 +41,6 @@ function crystal_initialize!(coloid::Coloid, gridwidth::Integer,
 end
 
 function add_random_particle!(coloid::Coloid)
-    F = eltype()
     new_particle = eltype(coloid.particles)(coloid.particle_sidenum, coloid.particle_radius,
         2π / coloid.particle_sidenum * rand(), coloid.boxsize .* rand(2))
     for particle in coloid.particles
