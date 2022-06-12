@@ -82,7 +82,7 @@ end
 
 Move an `AbstractPolygon`
 """
-@inline function move!(poly::AbstractPolygon, dist::AbstractVector{<:AbstractFloat})
+@inline function move!(poly::AbstractPolygon, dist::Tuple{Vararg{<:Real}})
     poly.center .+= dist
     poly.vertices .+= dist
 end
