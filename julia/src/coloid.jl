@@ -71,12 +71,17 @@ function add_random_particles!(coloid::Coloid, count::Integer)
 end
 
 function mcsimulate!(coloid::Coloid, move_radius::Real, rotation_span::Real, steps::Integer)
+    F = eltype(coloid.particles[1].radius)
+    move_radius = F(move_radius)
+    rotation_span = F(rotation_span)
+
     accepted_rotations = 0
     accepted_moves = 0
+
     # precalculate random numbers to speed-up calculations
-    move_or_rotate = @MVector rand(Bool, steps) # true: move, false: rotate
-    random_choices = @MVector rand(1:coloid.particle_count, steps)
-    random_numbers = @MVector rand(steps)
+    move_or_rotate = rand(Bool, steps) # true: move, false: rotate
+    random_choices = rand(1:coloid.particle_count, steps)
+    random_numbers = rand(F, steps)
 
     for step in 1:steps
         particle = coloid.particles[random_choices[step]]
@@ -94,11 +99,11 @@ function mcsimulate!(coloid::Coloid, move_radius::Real, rotation_span::Real, ste
 end
 
 function _one_mc_movement!(coloid::Coloid, particle::AbstractPolygon,
-        random_number::AbstractFloat, move_radius::AbstractFloat)
+        random_number::Real, move_radius::Real)
     coloid._temp_vertices .= particle.vertices
     coloid._temp_center .= particle.center
 
-    move!(particle, (move_radius * random_number, move_radius * (1-random_numbers[step]^2)))
+    move!(particle, (move_radius * random_number, move_radius * (1-random_number^2)))
 
     if any(p -> is_overlapping(particle, p), filter(!=(particle), coloid.particles))
         particle.vertices .= coloid._temp_vertices
@@ -110,7 +115,7 @@ function _one_mc_movement!(coloid::Coloid, particle::AbstractPolygon,
 end
 
 function _one_mc_rotation!(coloid::Coloid, particle::AbstractPolygon,
-        random_number::AbstractFloat, rotation_span::AbstractFloat)
+        random_number::Real, rotation_span::Real)
     coloid._temp_vertices .= particle.vertices
     coloid._temp_normals .= particle.normals
 
@@ -127,12 +132,17 @@ end
 
 function mcsimulate_periodic!(coloid::Coloid, move_radius::Real, rotation_span::Real,
         steps::Integer)
+    F = eltype(coloid.particles[1].radius)
+    move_radius = F(move_radius)
+    rotation_span = F(rotation_span)
+    
     accepted_rotations = 0
     accepted_moves = 0
+
     # precalculate random numbers to speed-up calculations
-    move_or_rotate = @MVector rand(Bool, steps) # true: move, false: rotate
-    random_choices = @MVector rand(1:coloid.particle_count, steps)
-    random_numbers = @MVector rand(steps)
+    move_or_rotate = rand(Bool, steps) # true: move, false: rotate
+    random_choices = rand(1:coloid.particle_count, steps)
+    random_numbers = rand(steps)
 
     for step in 1:steps
         particle = coloid.particles[random_choices[step]]
@@ -150,11 +160,11 @@ function mcsimulate_periodic!(coloid::Coloid, move_radius::Real, rotation_span::
 end
 
 function _one_mc_movement_periodic!(coloid::Coloid, particle::AbstractPolygon,
-        random_number::AbstractFloat, move_radius::AbstractFloat)
+        random_number::Real, move_radius::Real)
     coloid._temp_vertices .= particle.vertices
     coloid._temp_center .= particle.center
 
-    move!(particle, (move_radius * random_number, move_radius * (1-random_numbers[step]^2)))
+    move!(particle, (move_radius * random_number, move_radius * (1-random_number^2)))
     apply_periodic_boundary!(particle, coloid.boxsize)
 
     if any(p -> is_overlapping_periodic(particle, p, coloid.boxsize),
@@ -168,7 +178,7 @@ function _one_mc_movement_periodic!(coloid::Coloid, particle::AbstractPolygon,
 end
 
 function _one_mc_rotation_periodic!(coloid::Coloid, particle::AbstractPolygon,
-        random_number::AbstractFloat, rotation_span::AbstractFloat)
+        random_number::Real, rotation_span::Real)
     coloid._temp_vertices .= particle.vertices
     coloid._temp_normals .= particle.normals
 
