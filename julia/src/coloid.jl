@@ -14,11 +14,11 @@ struct Coloid{P<:AbstractPolygon, F<:AbstractFloat}
             particle_radius::Real, boxsize::Tuple{<:Real, <:Real}
             ) where {P<:AbstractPolygon, F<:AbstractFloat}
         boxsize = F.(boxsize)
-        particles = [P{F}(particle_sidenum, particle_radius, 0, boxsize .* ratio)
+        particles = [P{F}(particle_sidenum, particle_radius, 0, Tuple(boxsize .* ratio))
             for ratio in eachcol(rand(F, 2, particle_count))]
         new(particle_count, particle_sidenum, particle_radius, boxsize, particles,
             similar(particles[1].vertices), similar(particles[1].normals),
-            similar(partcles[1].center))
+            similar(particles[1].center))
     end
 end
 
@@ -32,11 +32,11 @@ function Coloid(particle_count::Integer, particle_sidenum::Integer,
     Coloid{RegPoly, Float32}(particle_count, particle_sidenum, particle_radius, boxsize)
 end
 
-function crystal_initialize!(coloid::Coloid, griddim::Tuple{<:Integer, <:Integer},
+function crystal_initialize!(coloid::Coloid, gridwidth::Integer,
         dist::Tuple{<:Real, <:Real}, offset::Tuple{<:Real, <:Real})
-    grid = Iterators.product(0:griddim[1]-1, 0:griddim[2]-1)
     for i in 1:coloid.particle_count
-        coloid.particles[i].center .= offset .+ dist .* grid[i]
+        coloid.particles[i].center .= (offset[1] + dist[1] * ((i-1) ÷ gridwidth),
+            offset[2] * dist[2] * ((i-1) % gridwidth))
     end
 end
 
