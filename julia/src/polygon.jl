@@ -140,8 +140,8 @@ Like `is_overlapping`, but for periodic boundary conditions.
 function is_overlapping_periodic(poly1::AbstractPolygon, poly2::AbstractPolygon,
         boxsize::Tuple{Vararg{<:Real}})
     distvec = (poly1.center[1] - poly2.center[1], poly1.center[2] - poly2.center[2])
-    distvec -= ((distvec[1] ÷ (boxsize[1] / 2)) .* boxsize[1],
-        (distvec[2] ÷ (boxsize[2] / 2)) .* boxsize[2])
+    distvec = (distvec[1] - (distvec[1] ÷ (boxsize[1] / 2)) .* boxsize[1],
+        distvec[2] - (distvec[2] ÷ (boxsize[2] / 2)) .* boxsize[2])
     centerdist = √(distvec[1]^2 + distvec[2]^2)
 
     if centerdist > poly1.radius + poly2.radius
@@ -209,8 +209,8 @@ end
         vertex::AbstractVector{<:Real}, normal::AbstractVector{<:Real},
         boxsize::Tuple{Vararg{<:Real}})
     distvec = (vertex[1] - refpoly.center[1], vertex[2] - refpoly.center[2])
-    distvec = ((distvec[1] ÷ (boxsize[1] / 2)) .* boxsize[1],
-        (distvec[2] ÷ (boxsize[2] / 2)) .* boxsize[2])
+    distvec = (distvec[1] - (distvec[1] ÷ (boxsize[1] / 2)) .* boxsize[1],
+        distvec[2] - (distvec[2] ÷ (boxsize[2] / 2)) .* boxsize[2])
     return distvec[1] * normal[1] + distvec[2] * normal[2] > refpoly.bisector
 end
 
@@ -218,8 +218,8 @@ end
         vertex::AbstractVector{<:Real}, normal::AbstractVector{<:Real},
         boxsize::Tuple{Vararg{<:Real}})
     distvec = (vertex[1] - refpoly.center[1], vertex[2] - refpoly.center[2])
-    distvec = ((distvec[1] ÷ (boxsize[1] / 2)) .* boxsize[1],
-        (distvec[2] ÷ (boxsize[2] / 2)) .* boxsize[2])
+    distvec = (distvec[1] - (distvec[1] ÷ (boxsize[1] / 2)) .* boxsize[1],
+        distvec[2] - (distvec[2] ÷ (boxsize[2] / 2)) .* boxsize[2])
     normaldist = distvec[1] * normal[1] + distvec[2] * normal[2]
     return normaldist > refpoly.bisector || normaldist < -refpoly.bisector
 end
