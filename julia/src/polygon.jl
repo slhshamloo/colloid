@@ -17,7 +17,7 @@ struct RegPoly{F<:AbstractFloat} <: AbstractPolygon
     normals::AbstractMatrix
 
     function RegPoly{F}(sidenum::Integer, radius::Real, angle::Real,
-            center::AbstractVector{<:Real}) where {F<:AbstractFloat}
+            center::Tuple{Vararg{<:Real}}) where {F<:AbstractFloat}
         bisector, center, vertices, θs, θ₀ = _build_regpoly_attributes{F}(
             sidenum, radius, angle, center)
 
@@ -29,7 +29,7 @@ struct RegPoly{F<:AbstractFloat} <: AbstractPolygon
 end
 
 function RegPoly(sidenum::Integer, radius::Real, angle::Real,
-        center::AbstractVector{<:Real})
+        center::Tuple{Vararg{<:Real}})
     RegPoly{Float32}(sidenum, radius, angle, center)
 end
 
@@ -48,7 +48,7 @@ struct RegEvenPoly{F<:AbstractFloat} <: AbstractPolygon
     normals::AbstractMatrix
 
     function RegEvenPoly{F}(sidenum::Integer, radius::Real, angle::Real,
-            center::AbstractVector{<:Real}) where {F<:AbstractFloat}
+            center::Tuple{Vararg{<:Real}}) where {F<:AbstractFloat}
         bisector, center, vertices, θs, θ₀ = _build_regpoly_attributes{F}(
             sidenum, radius, angle, center)
 
@@ -60,12 +60,12 @@ struct RegEvenPoly{F<:AbstractFloat} <: AbstractPolygon
 end
 
 function RegEvenPoly(sidenum::Integer, radius::Real, angle::Real,
-        center::AbstractVector{<:Real})
+        center::Tuple{Vararg{<:Real}})
     RegEvenPoly{Float32}(sidenum, radius, angle, center)
 end
 
 @inline function _build_regpoly_attributes{F}(sidenum::Integer, radius::Real, angle::Real,
-        center::AbstractVector{<:Real}) where {F<:AbstractFloat}
+        center::Tuple{Vararg{Real}}) where {F<:AbstractFloat}
     θ₀ = F(π / sidenum)
     bisector = F(radius * cos(θ₀))
     center = MVector{2}(F.(center))
@@ -108,7 +108,7 @@ end
 end
 
 @inline function apply_periodic_boundary!(poly::AbstractPolygon,
-        boxsize::Tuple{<:Real, <:Real})
+        boxsize::Tuple{Vararg{<:Real}})
     
 end
 
@@ -131,12 +131,12 @@ end
 
 """
     is_overlapping_periodic(poly1::AbstractPolygon, poly2::AbstractPolygon,
-        boxsize::Tuple{<:Real, <:Real})
+        boxsize::Tuple{Vararg{<:Real}})
 
 Like `is_overlapping`, but for periodic boundary conditions.
 """
 function is_overlapping_periodic(poly1::AbstractPolygon, poly2::AbstractPolygon,
-        boxsize::Tuple{<:Real, <:Real})
+        boxsize::Tuple{Vararg{<:Real}})
     distvec = (poly1.center - poly2.center)
     distvec -= (dist .÷ (boxsize ./ 2)) .* boxsize
     centerdist = √sum(^(2), distvec)
@@ -168,7 +168,7 @@ function _is_vertex_overlapping(refpoly::AbstractPolygon, testpoly::AbstractPoly
 end
 
 function _is_vertex_overlapping_periodic(refpoly::AbstractPolygon,
-        testpoly::AbstractPolygon, boxsize::Tuple{<:Real, <:Real})
+        testpoly::AbstractPolygon, boxsize::Tuple{Vararg{<:Real}})
     for vertex in eachcol(testpoly.vertices)
         overlap = true
         for normal in eachcol(refpoly.normals)
@@ -197,7 +197,7 @@ end
 
 @inline function _is_vertex_outside_normal_periodic(refpoly::RegPoly,
         vertex::AbstractVector{<:Real}, normal::AbstractVector{<:Real},
-        boxsize::Tuple{<:Real, <:Real})
+        boxsize::Tuple{Vararg{<:Real}})
     distvec = vertex - center
     distvec -= (dist .÷ (boxsize ./ 2)) .* boxsize
     return sum(distvec .* normal) > refpoly.bisector
@@ -205,7 +205,7 @@ end
 
 @inline function _is_vertex_outside_normal_periodic(refpoly::RegEvenPoly,
         vertex::AbstractVector{<:Real}, normal::AbstractVector{<:Real},
-        boxsize::Tuple{<:Real, <:Real})
+        boxsize::Tuple{Vararg{<:Real}})
     distvec = vertex - center
     distvec -= (dist .÷ (boxsize ./ 2)) .* boxsize
     normaldist = sum(distvec .* normal)
