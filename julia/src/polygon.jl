@@ -18,8 +18,8 @@ struct RegPoly{F<:AbstractFloat} <: AbstractPolygon
 
     function RegPoly{F}(sidenum::Integer, radius::Real, angle::Real,
             center::Tuple{Vararg{<:Real}}) where {F<:AbstractFloat}
-        bisector, center, vertices, θs, θ₀ = _build_regpoly_attributes{F}(
-            sidenum, radius, angle, center)
+        bisector, center, vertices, θs, θ₀ = _build_regpoly_attributes(
+            F, sidenum, radius, angle, center)
 
         θs .-= θ₀
         normals = MMatrix{2, sidenum, F}(vcat(cos.(θs)', sin.(θs)'))
@@ -49,8 +49,8 @@ struct RegEvenPoly{F<:AbstractFloat} <: AbstractPolygon
 
     function RegEvenPoly{F}(sidenum::Integer, radius::Real, angle::Real,
             center::Tuple{Vararg{<:Real}}) where {F<:AbstractFloat}
-        bisector, center, vertices, θs, θ₀ = _build_regpoly_attributes{F}(
-            sidenum, radius, angle, center)
+        bisector, center, vertices, θs, θ₀ = _build_regpoly_attributes(
+            F, sidenum, radius, angle, center)
 
         θs = θs[1:sidenum÷2] .- θ₀
         normals = MMatrix{2, sidenum÷2, F}(vcat(cos.(θs)', sin.(θs)'))
@@ -64,8 +64,8 @@ function RegEvenPoly(sidenum::Integer, radius::Real, angle::Real,
     RegEvenPoly{Float32}(sidenum, radius, angle, center)
 end
 
-@inline function _build_regpoly_attributes{F}(sidenum::Integer, radius::Real, angle::Real,
-        center::Tuple{Vararg{Real}}) where {F<:AbstractFloat}
+@inline function _build_regpoly_attributes(F, sidenum::Integer, radius::Real,
+        angle::Real, center::Tuple{Vararg{Real}})
     θ₀ = F(π / sidenum)
     bisector = F(radius * cos(θ₀))
     center = MVector{2}(F.(center))
