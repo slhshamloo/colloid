@@ -36,7 +36,7 @@ function crystal_initialize!(coloid::Coloid, gridwidth::Integer,
         dist::Tuple{<:Real, <:Real}, offset::Tuple{<:Real, <:Real})
     for i in 1:coloid.particle_count
         coloid.particles[i].center .= (offset[1] + dist[1] * ((i-1) ÷ gridwidth),
-            offset[2] * dist[2] * ((i-1) % gridwidth))
+            offset[2] + dist[2] * ((i-1) % gridwidth))
     end
 end
 
@@ -71,7 +71,7 @@ function add_random_particles!(coloid::Coloid, count::Integer)
 end
 
 function mcsimulate!(coloid::Coloid, move_radius::Real, rotation_span::Real, steps::Integer)
-    F = eltype(coloid.particles[1].radius)
+    F = typeof(coloid.particles[1].radius)
     move_radius = F(move_radius)
     rotation_span = F(rotation_span)
 
@@ -132,7 +132,7 @@ end
 
 function mcsimulate_periodic!(coloid::Coloid, move_radius::Real, rotation_span::Real,
         steps::Integer)
-    F = eltype(coloid.particles[1].radius)
+    F = typeof(coloid.particles[1].radius)
     move_radius = F(move_radius)
     rotation_span = F(rotation_span)
     
@@ -142,7 +142,7 @@ function mcsimulate_periodic!(coloid::Coloid, move_radius::Real, rotation_span::
     # precalculate random numbers to speed-up calculations
     move_or_rotate = rand(Bool, steps) # true: move, false: rotate
     random_choices = rand(1:coloid.particle_count, steps)
-    random_numbers = rand(steps)
+    random_numbers = rand(F, steps)
 
     for step in 1:steps
         particle = coloid.particles[random_choices[step]]
