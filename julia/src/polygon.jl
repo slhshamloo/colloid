@@ -1,12 +1,14 @@
 abstract type AbstractPolygon end
 
 """
+    RegPoly{F}(sidenum, radius, angle, center)
     RegPoly(sidenum, radius, angle, center)
 
-Create a regular polygon with `sidenum` sides, side length `sidelen`, counter-clockwise
-rotation about its center `angle`, and center coordinates `center`; first, one side is set to
-be prependicular to the x axis (the first axis), and the rotation angle is defined relative to
-this configuration.
+A regular polygon with `sidenum` sides, side length `sidelen`, counter-clockwise rotation
+about its center `angle`, and center coordinates `center`; first, one side is set to be
+prependicular to the x axis (the first axis), and the rotation angle is defined relative to
+this configuration. `F` is the floating point type. If not specified, it is set to
+`Float32`.
 """
 struct RegPoly{F<:AbstractFloat} <: AbstractPolygon
     sidenum::Integer
@@ -34,6 +36,7 @@ function RegPoly(sidenum::Integer, radius::Real, angle::Real,
 end
 
 """
+    RegEvenPoly{F}(sidenum, radius, angle, center)
     RegEvenPoly(sidenum, radius, angle, center)
 
 Like `RegPoly`, but optimized for even-sided polygons; only half of the normals are stored
@@ -107,6 +110,11 @@ end
     end
 end
 
+"""
+    apply_periodic_boundary!(poly::AbstractPolygon, boxsize::Tuple)
+
+Apply periodic boundary conditions with the given box dimensions `boxsize`
+"""
 @inline function apply_periodic_boundary!(poly::AbstractPolygon,
         boxsize::Tuple{Vararg{<:Real}})
     poly.center .= (poly.center .+ boxsize) .% boxsize
@@ -135,7 +143,7 @@ end
     is_overlapping_periodic(poly1::AbstractPolygon, poly2::AbstractPolygon,
         boxsize::Tuple{Vararg{<:Real}})
 
-Like `is_overlapping`, but for periodic boundary conditions.
+Like `is_overlapping`, but with periodic boundary conditions.
 """
 function is_overlapping_periodic(poly1::AbstractPolygon, poly2::AbstractPolygon,
         boxsize::Tuple{Vararg{<:Real}})
