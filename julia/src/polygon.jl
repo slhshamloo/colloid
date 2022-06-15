@@ -20,13 +20,7 @@ struct RegPoly{F<:AbstractFloat} <: AbstractPolygon
 
     function RegPoly{F}(sidenum::Integer, radius::Real, angle::Real,
             center::Tuple{Vararg{<:Real}}) where {F<:AbstractFloat}
-        bisector, center, vertices, θs, θ₀ = _build_regpoly_attributes(
-            F, sidenum, radius, angle, center)
-
-        θs .-= θ₀
-        normals = MMatrix{2, sidenum, F}(vcat(cos.(θs)', sin.(θs)'))
-
-        new{F}(sidenum, radius, bisector, center, vertices, normals)
+        new{F}(_build_regpoly_attributes(F, sidenum, sidenum, radius, angle, center)...)
     end
 end
 
@@ -52,13 +46,7 @@ struct RegEvenPoly{F<:AbstractFloat} <: AbstractPolygon
 
     function RegEvenPoly{F}(sidenum::Integer, radius::Real, angle::Real,
             center::Tuple{Vararg{<:Real}}) where {F<:AbstractFloat}
-        bisector, center, vertices, θs, θ₀ = _build_regpoly_attributes(
-            F, sidenum, radius, angle, center)
-
-        θs = θs[1:sidenum÷2] .- θ₀
-        normals = MMatrix{2, sidenum÷2, F}(vcat(cos.(θs)', sin.(θs)'))
-
-        new{F}(sidenum, radius, bisector, center, vertices, normals)
+        new{F}(_build_regpoly_attributes(F, sidenum, sidenum÷2, radius, angle, center)...)
     end
 end
 
@@ -67,17 +55,24 @@ function RegEvenPoly(sidenum::Integer, radius::Real, angle::Real,
     RegEvenPoly{Float32}(sidenum, radius, angle, center)
 end
 
-@inline function _build_regpoly_attributes(F, sidenum::Integer, radius::Real,
-        angle::Real, center::Tuple{Vararg{Real}})
+@inline function _build_regpoly_attributes(F, sidenum::Integer, normalcount::Integer,
+        radius::Real, angle::Real, center::Tuple{Vararg{Real}})
     θ₀ = F(π / sidenum)
     bisector = F(radius * cos(θ₀))
     center = MVector{2}(F.(center))
 
-    θs = MVector{sidenum}([(2i + 1) * θ₀ + angle for i in 0:sidenum-1])
-    vertices = MMatrix{2, sidenum, F}(radius * vcat(cos.(θs)', sin.(θs)'))
+    θs = (k * θ₀ + angle for k in 1:2:2sidenum-1)
+    vertices = MMatrix{2, sidenum, F}(undef)
+    @. vertices[1, :] = radius * cos(θs)
+    @. vertices[2, :] = radius * sin(θs)
     vertices .+= center
+
+    θs = (k * θ₀ + angle for k in 0:2:2normalcount-2)
+    normals = MMatrix{2, normalcount, F}(undef)
+    @. normals[1, :] = cos(θs)
+    @. normals[2, :] = sin(θs)
     
-    return bisector, center, vertices, θs, θ₀
+    return sidenum, radius, bisector, center, vertices, normals
 end
 
 """
