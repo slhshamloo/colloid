@@ -22,14 +22,24 @@ struct Coloid{P<:AbstractPolygon, F<:AbstractFloat}
     end
 end
 
-function Coloid{P}(particle_count::Integer, particle_sidenum::Integer,
-        particle_radius::Real, boxsize::Tuple{<:Real, <:Real}) where {P<:AbstractPolygon}
-    Coloid{P, Float32}(particle_count, particle_sidenum, particle_radius, boxsize)
+function Coloid{F}(particle_count::Integer, particle_sidenum::Integer,
+        particle_radius::Real, boxsize::Tuple{<:Real, <:Real}) where {F<:AbstractFloat}
+    if particle_sidenum % 2 == 0
+        P = RegEvenPoly
+    else
+        P = RegPoly
+    end
+    Coloid{P, F}(particle_count, particle_sidenum, particle_radius, boxsize)
 end
 
 function Coloid(particle_count::Integer, particle_sidenum::Integer,
         particle_radius::Real, boxsize::Tuple{<:Real, <:Real})
-    Coloid{RegPoly, Float32}(particle_count, particle_sidenum, particle_radius, boxsize)
+    if particle_sidenum % 2 == 0
+        P = RegEvenPoly
+    else
+        P = RegPoly
+    end
+    Coloid{P, Float32}(particle_count, particle_sidenum, particle_radius, boxsize)
 end
 
 function crystal_initialize!(coloid::Coloid, gridwidth::Integer,
