@@ -100,8 +100,9 @@ end
 
 @inline function rotate2d!(vectors::AbstractVecOrMat, angle::Real)
     for v in eachcol(vectors)
-        v[1] = v[1] * cos(angle) - v[2] * sin(angle)
+        temp = v[1] * cos(angle) - v[2] * sin(angle)
         v[2] = v[1] * sin(angle) + v[2] * cos(angle)
+        v[1] = temp
     end
 end
 
