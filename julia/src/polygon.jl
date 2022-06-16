@@ -57,9 +57,9 @@ end
 
 @inline function _build_regpoly_attributes(F, sidenum::Integer, normalcount::Integer,
         radius::Real, angle::Real, center::Tuple{Vararg{Real}})
-    θ₀ = F(π / sidenum)
-    bisector = F(radius * cos(θ₀))
-    center = MVector{2}(F.(center))
+    θ₀ = π / sidenum
+    bisector = radius * cos(θ₀)
+    center = MVector{2, F}(center)
 
     θs = (k * θ₀ + angle for k in 1:2:2sidenum-1)
     vertices = MMatrix{2, sidenum, F}(undef)
@@ -72,7 +72,7 @@ end
     @. normals[1, :] = cos(θs)
     @. normals[2, :] = sin(θs)
     
-    return sidenum, radius, bisector, center, vertices, normals
+    return sidenum, F(radius), F(bisector), center, vertices, normals
 end
 
 """
