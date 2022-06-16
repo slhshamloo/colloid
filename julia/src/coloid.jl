@@ -45,8 +45,12 @@ end
 function crystal_initialize!(coloid::Coloid, gridwidth::Integer,
         dist::Tuple{<:Real, <:Real}, offset::Tuple{<:Real, <:Real})
     for i in 1:coloid.particle_count
-        coloid.particles[i].center .= (offset[1] + dist[1] * ((i-1) ÷ gridwidth),
+        particle = coloid.particles[i]
+        new_center = (offset[1] + dist[1] * ((i-1) ÷ gridwidth),
             offset[2] + dist[2] * ((i-1) % gridwidth))
+        warp = new_center .- particle.center
+        particle.center .= new_center
+        particle.vertices .+= warp
     end
 end
 
@@ -82,8 +86,8 @@ end
 
 function mcsimulate!(coloid::Coloid, move_radius::Real, rotation_span::Real, steps::Integer)
     F = typeof(coloid.particles[1].radius)
-    move_radius = F(move_radius)
-    rotation_span = F(rotation_span)
+    move_radius = move_radius
+    rotation_span = rotation_span
 
     accepted_rotations = 0
     accepted_moves = 0
