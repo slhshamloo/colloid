@@ -81,7 +81,8 @@ end
 Move an `AbstractPolygon`
 """
 @inline function move!(poly::AbstractPolygon, dist::Tuple{Vararg{<:Real}})
-    poly.center .+= dist
+    poly.center[1] += dist[1]
+    poly.center[2] += dist[2]
     poly.vertices .+= dist
 end
 
@@ -113,8 +114,10 @@ Apply periodic boundary conditions with the given box dimensions `boxsize`
 """
 @inline function apply_periodic_boundary!(poly::AbstractPolygon,
         boxsize::Tuple{Vararg{<:Real}})
-    poly.center .= (poly.center .+ boxsize) .% boxsize
-    poly.vertices .= (poly.vertices .+ boxsize) .% boxsize
+    poly.center[1] = (poly.center[1] + boxsize[1]) % boxsize[1]
+    poly.center[2] = (poly.center[2] + boxsize[2]) % boxsize[2]
+    shift = (poly.center[1] - old_center[1], poly.center[2] - old_center[2])
+    poly.vertices .+= shift
 end
 
 """
@@ -123,46 +126,29 @@ end
 Check whether or not `poly1` and `poly2` are is_overlapping. The function is optimized
 for even polygons.
 """
-function is_overlapping(poly1::AbstractPolygon, poly2::AbstractPolygon)
-    centerdist = √((poly1.center[1] - poly2.center[1])^2
-        + (poly1.center[2] - poly2.center[2])^2)
-    if centerdist > poly1.radius + poly2.radius
+function is_overlapping(poly1::AbstractPolygon, poly2::AbstractPolygon,
+        boundary_shift::Function = x -> (0, 0))
+    dist = (poly1.center[1] - poly2.center[1], poly1.center[2] - poly2.center[2])
+    shift = boundary_shift(dist)
+    dist = (dist[1] + shift[1], dist[2] + shift[2])
+    distnorm = √(dist[1]^2 + dist[2]^2)
+
+    if distnorm > poly1.radius + poly2.radius
         return false
-    elseif centerdist <= poly1.bisector + poly2.bisector
+    elseif distnorm <= poly1.bisector + poly2.bisector
         return true
     end
     
-    return _is_vertex_overlapping(poly1, poly2) || _is_vertex_overlapping(poly2, poly1)
+    return (_is_vertex_overlapping(poly1, poly2, shift)
+        || _is_vertex_overlapping(poly2, poly1, shift))
 end
 
-"""
-    is_overlapping_periodic(poly1::AbstractPolygon, poly2::AbstractPolygon,
-        boxsize::Tuple{Vararg{<:Real}})
-
-Like `is_overlapping`, but with periodic boundary conditions.
-"""
-function is_overlapping_periodic(poly1::AbstractPolygon, poly2::AbstractPolygon,
-        boxsize::Tuple{Vararg{<:Real}})
-    distvec = (poly1.center[1] - poly2.center[1], poly1.center[2] - poly2.center[2])
-    distvec = (distvec[1] - (distvec[1] ÷ (boxsize[1] / 2)) .* boxsize[1],
-        distvec[2] - (distvec[2] ÷ (boxsize[2] / 2)) .* boxsize[2])
-    centerdist = √(distvec[1]^2 + distvec[2]^2)
-
-    if centerdist > poly1.radius + poly2.radius
-        return false
-    elseif centerdist <= poly1.bisector + poly2.bisector
-        return true
-    end
-
-    return (_is_vertex_overlapping_periodic(poly1, poly2, boxsize)
-        || _is_vertex_overlapping_periodic(poly2, poly1, boxsize))
-end
-
-function _is_vertex_overlapping(refpoly::AbstractPolygon, testpoly::AbstractPolygon)
+function _is_vertex_overlapping(refpoly::AbstractPolygon, testpoly::AbstractPolygon,
+        shift::Tuple{Vararg{<:Real}})
     for vertex in eachcol(testpoly.vertices)
         overlap = true
         for normal in eachcol(refpoly.normals)
-            if _is_vertex_outside_normal(refpoly, vertex, normal)
+            if _is_vertex_outside_normal(refpoly, vertex, normal, shift)
                 overlap = false
                 break
             end
@@ -174,56 +160,22 @@ function _is_vertex_overlapping(refpoly::AbstractPolygon, testpoly::AbstractPoly
     return false
 end
 
-function _is_vertex_overlapping_periodic(refpoly::AbstractPolygon,
-        testpoly::AbstractPolygon, boxsize::Tuple{Vararg{<:Real}})
-    for vertex in eachcol(testpoly.vertices)
-        overlap = true
-        for normal in eachcol(refpoly.normals)
-            if _is_vertex_outside_normal_periodic(refpoly, vertex, normal, boxsize)
-                overlap = false
-                break
-            end
-        end
-        if overlap
-            return true
-        end
-    end
-    return false
-end
-
-macro vertexdot(vertex, center, normal)
+macro vertexdot(vertex, center, normal, shift)
     quote
-        (($(esc(vertex))[1] - $(esc(center))[1]) * $(esc(normal))[1]
-        + ($(esc(vertex))[2] - $(esc(center))[2]) * $(esc(normal))[2])
+        (($(esc(vertex))[1] - $(esc(center))[1] + $(esc(shift))[1]) * $(esc(normal))[1]
+        + ($(esc(vertex))[2] - $(esc(center))[2] + $(esc(shift))[2]) * $(esc(normal))[2])
     end
 end
 
 @inline function _is_vertex_outside_normal(refpoly::RegPoly,
-        vertex::AbstractVector{<:Real}, normal::AbstractVector{<:Real})
-    return @vertexdot(vertex, refpoly.center, normal) > refpoly.bisector
+        vertex::AbstractVector{<:Real}, normal::AbstractVector{<:Real},
+        shift::Tuple{Vararg{<:Real}})
+    return @vertexdot(vertex, refpoly.center, normal, shift) > refpoly.bisector
 end
 
 @inline function _is_vertex_outside_normal(refpoly::RegEvenPoly,
-        vertex::AbstractVector{<:Real}, normal::AbstractVector{<:Real})
-    normaldist = @vertexdot(vertex, refpoly.center, normal)
-    return normaldist > refpoly.bisector || normaldist < -refpoly.bisector
-end
-
-@inline function _is_vertex_outside_normal_periodic(refpoly::RegPoly,
         vertex::AbstractVector{<:Real}, normal::AbstractVector{<:Real},
-        boxsize::Tuple{Vararg{<:Real}})
-    distvec = (vertex[1] - refpoly.center[1], vertex[2] - refpoly.center[2])
-    distvec = (distvec[1] - (distvec[1] ÷ (boxsize[1] / 2)) .* boxsize[1],
-        distvec[2] - (distvec[2] ÷ (boxsize[2] / 2)) .* boxsize[2])
-    return distvec[1] * normal[1] + distvec[2] * normal[2] > refpoly.bisector
-end
-
-@inline function _is_vertex_outside_normal_periodic(refpoly::RegEvenPoly,
-        vertex::AbstractVector{<:Real}, normal::AbstractVector{<:Real},
-        boxsize::Tuple{Vararg{<:Real}})
-    distvec = (vertex[1] - refpoly.center[1], vertex[2] - refpoly.center[2])
-    distvec = (distvec[1] - (distvec[1] ÷ (boxsize[1] / 2)) .* boxsize[1],
-        distvec[2] - (distvec[2] ÷ (boxsize[2] / 2)) .* boxsize[2])
-    normaldist = distvec[1] * normal[1] + distvec[2] * normal[2]
-    return normaldist > refpoly.bisector || normaldist < -refpoly.bisector
+        shift::Tuple{Vararg{<:Real}})
+    projected_distance = @vertexdot(vertex, refpoly.center, normal, shift)
+    return projected_distance > refpoly.bisector || projected_distance < -refpoly.bisector
 end
