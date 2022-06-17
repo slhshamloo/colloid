@@ -54,6 +54,14 @@ function crystal_initialize!(coloid::Coloid, gridwidth::Integer,
     end
 end
 
+function square_nematic_order(coloid::Coloid)
+    return mean(square_nematic_order, coloid.particles)
+end
+
+function square_nematic_order(poly::AbstractPolygon)
+    return (3 * max(poly.normal[1]^2, poly.normal[2]^2) - 1) / 2
+end
+
 function add_random_particle!(coloid::Coloid)
     new_particle = eltype(coloid.particles)(coloid.particle_sidenum, coloid.particle_radius,
         2π / coloid.particle_sidenum * rand(), coloid.boxsize .* rand(2))

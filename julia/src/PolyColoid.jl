@@ -5,6 +5,7 @@ export Coloid, mcsimulate!, mcsimulate_periodic!, crystal_initialize!,
 
 using RecipesBase
 using StaticArrays
+using Statistics: mean
 
 include("polygon.jl")
 include("overlap.jl")
