@@ -7,6 +7,8 @@ using RecipesBase
 using StaticArrays
 
 include("polygon.jl")
+include("overlap.jl")
+include("potential.jl")
 include("coloid.jl")
 include("visualize.jl")
 
