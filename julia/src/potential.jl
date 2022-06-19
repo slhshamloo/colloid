@@ -11,9 +11,9 @@ function potential(poly1::AbstractPolygon, poly2::AbstractPolygon,
         return potfunc(distnorm)
     end
 
-    single_potential = _corner_invpotential(poly1, poly2, shift, potfunc)
+    single_potential = _corner_potential(poly1, poly2, shift, potfunc)
     if single_potential == 0
-        return _corner_invpotential(poly2, poly1, shift, potfunc)
+        return _corner_potential(poly2, poly1, shift, potfunc)
     else
         return single_potential
     end
@@ -36,7 +36,7 @@ function _corner_potential(refpoly::AbstractPolygon, testpoly::AbstractPolygon,
             return potfunc(√(vertex_dist[1]^2 + vertex_dist[2]^2))
         end
     end
-    return 0 * refpoly.center
+    return 0 * refpoly.radius
 end
 
 @inline function _vertex_dist_calc(refpoly::RegPoly, vertex::AbstractVector{<:Real},
@@ -47,7 +47,7 @@ end
 end
 
 @inline function _vertex_dist_calc(refpoly::RegEvenPoly, vertex::AbstractVector{<:Real},
-        normal::AbstractVector{<:Real})
+        normal::AbstractVector{<:Real}, shift::Tuple{Vararg{<:Real}})
     distvec = (vertex[1] - refpoly.center[1] + shift[1],
         vertex[2] - refpoly.center[2] + shift[2])
     normaldist = distvec[1] * normal[1] + distvec[2] * normal[2]
