@@ -114,6 +114,7 @@ Apply periodic boundary conditions with the given box dimensions `boxsize`
 """
 @inline function apply_periodic_boundary!(poly::AbstractPolygon,
         boxsize::Tuple{Vararg{<:Real}})
+    old_center = (poly.center[1], poly.center[2])
     poly.center[1] = (poly.center[1] + boxsize[1]) % boxsize[1]
     poly.center[2] = (poly.center[2] + boxsize[2]) % boxsize[2]
     shift = (poly.center[1] - old_center[1], poly.center[2] - old_center[2])
