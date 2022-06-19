@@ -136,19 +136,34 @@ end
 
 function _one_mc_movement!(coloid::Coloid, particle::AbstractPolygon,
         rnd1::Real, rnd2::Real, move_radius::Real, interaction_strength::Real)
+    if !isinf(interaction_strength)
+        prevpot = sum(p -> potential(p, particle), filter(!=(particle), coloid.particles))
+    end
+    
     coloid._temp_vertices .= particle.vertices
     coloid._temp_center .= particle.center
 
     move!(particle, (move_radius * rnd1, move_radius * (1-rnd1^2)))
     apply_periodic_boundary!(particle, coloid.boxsize)
 
-    if any(p -> is_overlapping(particle, p, periodic_boundary_shift(coloid.boxsize)),
-            filter(!=(particle), coloid.particles))
-        particle.vertices .= coloid._temp_vertices
-        particle.center .= coloid._temp_center
-        return 0
+    if isinf(interaction_strength)
+        if any(p -> is_overlapping(particle, p, periodic_boundary_shift(coloid.boxsize)),
+                filter(!=(particle), coloid.particles))
+            particle.vertices .= coloid._temp_vertices
+            particle.center .= coloid._temp_center
+            return 0
+        else
+            return 1
+        end
     else
-        return 1
+        newpot = sum(p -> potential(p, particle), filter(!=(particle), coloid.particles))
+        if ℯ^(interaction_strength * (prevpot - newpot)) > rnd2
+            return 1
+        else
+            particle.vertices .= coloid._temp_vertices
+            particle.center .= coloid._temp_center
+            return 0
+        end
     end
 end
 
