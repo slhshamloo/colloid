@@ -1,5 +1,4 @@
 struct Coloid{P<:AbstractPolygon, F<:AbstractFloat}
-    particle_count::Integer
     particle_sidenum::Integer
     particle_radius::Real
     boxsize::Tuple{<:Real, <:Real}
@@ -16,7 +15,7 @@ struct Coloid{P<:AbstractPolygon, F<:AbstractFloat}
         boxsize = F.(boxsize)
         particles = [P{F}(particle_sidenum, particle_radius, 0, Tuple(boxsize .* ratio))
             for ratio in eachcol(rand(F, 2, particle_count))]
-        new(particle_count, particle_sidenum, particle_radius, boxsize, particles,
+        new(particle_sidenum, particle_radius, boxsize, particles,
             similar(particles[1].vertices), similar(particles[1].normals),
             similar(particles[1].center))
     end
@@ -44,7 +43,7 @@ end
 
 function crystal_initialize!(coloid::Coloid, gridwidth::Integer,
         dist::Tuple{<:Real, <:Real}, offset::Tuple{<:Real, <:Real})
-    for i in 1:coloid.particle_count
+    for i in 1:length(coloid.particles)
         particle = coloid.particles[i]
         new_center = (offset[1] + dist[1] * ((i-1) ÷ gridwidth),
             offset[2] + dist[2] * ((i-1) % gridwidth))
@@ -103,7 +102,7 @@ function simulate!(coloid::Coloid, move_radius::Real, rotation_span::Real;
 
     # precalculate random numbers to speed-up calculations
     move_or_rotate = rand(Bool, steps) # true: move, false: rotate
-    random_choices = rand(1:coloid.particle_count, steps)
+    random_choices = rand(1:length(coloid.particles), steps)
     random_numbers = rand(F, 2, steps)
 
     for step in 1:steps
