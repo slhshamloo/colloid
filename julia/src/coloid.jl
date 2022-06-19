@@ -137,7 +137,8 @@ end
 function _one_mc_movement!(coloid::Coloid, particle::AbstractPolygon,
         rnd1::Real, rnd2::Real, move_radius::Real, interaction_strength::Real)
     if !isinf(interaction_strength)
-        prevpot = sum(p -> potential(p, particle), filter(!=(particle), coloid.particles))
+        prevpot = sum(p -> potential(p, particle, periodic_boundary_shift(coloid.boxsize)),
+            filter(!=(particle), coloid.particles))
     end
     
     coloid._temp_vertices .= particle.vertices
@@ -156,7 +157,8 @@ function _one_mc_movement!(coloid::Coloid, particle::AbstractPolygon,
             return 1
         end
     else
-        newpot = sum(p -> potential(p, particle), filter(!=(particle), coloid.particles))
+        newpot = sum(p -> potential(p, particle, periodic_boundary_shift(coloid.boxsize)),
+            filter(!=(particle), coloid.particles))
         if ℯ^(interaction_strength * (prevpot - newpot)) > rnd2
             return 1
         else
@@ -170,7 +172,8 @@ end
 function _one_mc_rotation!(coloid::Coloid, particle::AbstractPolygon,
         rnd1::Real, rnd2::Real, rotation_span::Real, interaction_strength::Real)
     if !isinf(interaction_strength)
-        prevpot = sum(p -> potential(p, particle), filter(!=(particle), coloid.particles))
+        prevpot = sum(p -> potential(p, particle, periodic_boundary_shift(coloid.boxsize)),
+            filter(!=(particle), coloid.particles))
     end
     
     coloid._temp_vertices .= particle.vertices
@@ -188,7 +191,8 @@ function _one_mc_rotation!(coloid::Coloid, particle::AbstractPolygon,
             return 1
         end
     else
-        newpot = sum(p -> potential(p, particle), filter(!=(particle), coloid.particles))
+        newpot = sum(p -> potential(p, particle, periodic_boundary_shift(coloid.boxsize)),
+            filter(!=(particle), coloid.particles))
         if ℯ^(interaction_strength * (prevpot - newpot)) > rnd2
             return 1
         else
