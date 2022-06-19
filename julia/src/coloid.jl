@@ -57,7 +57,7 @@ end
 square_nematic_order(coloid::Coloid) = mean(square_nematic_order, coloid.particles)
 
 function square_nematic_order(poly::AbstractPolygon)
-    return (3 * max(poly.normal[1]^2, poly.normal[2]^2) - 1) / 2
+    return (3 * max(poly.normals[1]^2, poly.normals[2]^2) - 1) / 2
 end
 
 function add_random_particle!(coloid::Coloid)
