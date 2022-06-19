@@ -54,9 +54,7 @@ function crystal_initialize!(coloid::Coloid, gridwidth::Integer,
     end
 end
 
-function square_nematic_order(coloid::Coloid)
-    return mean(square_nematic_order, coloid.particles)
-end
+square_nematic_order(coloid::Coloid) = mean(square_nematic_order, coloid.particles)
 
 function square_nematic_order(poly::AbstractPolygon)
     return (3 * max(poly.normal[1]^2, poly.normal[2]^2) - 1) / 2
@@ -92,42 +90,60 @@ function add_random_particles!(coloid::Coloid, count::Integer)
     end
 end
 
-function mcsimulate!(coloid::Coloid, move_radius::Real, rotation_span::Real, steps::Integer)
+function simulate!(coloid::Coloid, move_radius::Real, rotation_span::Real;
+        interaction_strength::Real = Inf, steps::Integer = 100, calculate::Bool = false)
     F = typeof(coloid.particles[1].radius)
-    move_radius = move_radius
-    rotation_span = rotation_span
+    move_radius, rotation_span = F(move_radius), F(rotation_span)
 
-    accepted_rotations = 0
-    accepted_moves = 0
+    accepted_rotations, accepted_moves = 0, 0
+    if calculate
+        nematic_orders = Vector{F}(undef, steps + 1)
+        nematic_orders[1] = square_nematic_order(coloid)
+    end
 
     # precalculate random numbers to speed-up calculations
     move_or_rotate = rand(Bool, steps) # true: move, false: rotate
     random_choices = rand(1:coloid.particle_count, steps)
-    random_numbers = rand(F, steps)
+    random_numbers = rand(F, 2, steps)
 
     for step in 1:steps
         particle = coloid.particles[random_choices[step]]
+        if calculate
+            nematic_orders[step+1] = nematic_orders[step] - square_nematic_order(particle)
+        end
         if move_or_rotate[step]
             accepted_moves += _one_mc_movement!(coloid, particle,
-                random_numbers[step], move_radius)
+                random_numbers[1, step], random_numbers[2, step], 
+                move_radius, interaction_strength)
         else
             accepted_rotations += _one_mc_rotation!(coloid, particle,
-                random_numbers[step], rotation_span)
+                random_numbers[1, step], random_numbers[2, step],
+                rotation_span, interaction_strength)
+        end
+        if calculate
+            nematic_orders[step+1] = nematic_orders[step] + square_nematic_order(particle)
         end
     end
 
     all_moves = count(move_or_rotate)
-    return accepted_moves / all_moves, accepted_rotations / (steps - all_moves)
+    if calculate
+        return (nematic_orders, accepted_moves / all_moves,
+            accepted_rotations / (steps - all_moves))
+    else
+        return accepted_moves / all_moves, accepted_rotations / (steps - all_moves)
+    end
 end
 
 function _one_mc_movement!(coloid::Coloid, particle::AbstractPolygon,
-        random_number::Real, move_radius::Real)
+        rnd1::Real, rnd2::Real, move_radius::Real, interaction_strength::Real)
     coloid._temp_vertices .= particle.vertices
     coloid._temp_center .= particle.center
 
-    move!(particle, (move_radius * random_number, move_radius * (1-random_number^2)))
+    move!(particle, (move_radius * rnd1, move_radius * (1-rnd1^2)))
+    apply_periodic_boundary!(particle, coloid.boxsize)
 
-    if any(p -> is_overlapping(particle, p), filter(!=(particle), coloid.particles))
+    if any(p -> is_overlapping(particle, p, periodic_boundary_shift(coloid.boxsize)),
+            filter(!=(particle), coloid.particles))
         particle.vertices .= coloid._temp_vertices
         particle.center .= coloid._temp_center
         return 0
@@ -137,82 +153,37 @@ function _one_mc_movement!(coloid::Coloid, particle::AbstractPolygon,
 end
 
 function _one_mc_rotation!(coloid::Coloid, particle::AbstractPolygon,
-        random_number::Real, rotation_span::Real)
+        rnd1::Real, rnd2::Real, rotation_span::Real, interaction_strength::Real)
+    if !isinf(interaction_strength)
+        prevpot = sum(p -> potential(p, particle), filter(!=(particle), coloid.particles))
+    end
+    
     coloid._temp_vertices .= particle.vertices
     coloid._temp_normals .= particle.normals
 
-    rotate!(particle, rotation_span * (random_number - 0.5))
+    rotate!(particle, rotation_span * (rnd1 - 0.5))
 
-    if any(p -> is_overlapping(particle, p), filter(!=(particle), coloid.particles))
-        particle.vertices .= coloid._temp_vertices
-        particle.normals .= coloid._temp_normals
-        return 0
-    else
-        return 1
-    end
-end
-
-function mcsimulate_periodic!(coloid::Coloid, move_radius::Real, rotation_span::Real,
-        steps::Integer)
-    F = typeof(coloid.particles[1].radius)
-    move_radius = F(move_radius)
-    rotation_span = F(rotation_span)
-    
-    accepted_rotations = 0
-    accepted_moves = 0
-
-    # precalculate random numbers to speed-up calculations
-    move_or_rotate = rand(Bool, steps) # true: move, false: rotate
-    random_choices = rand(1:coloid.particle_count, steps)
-    random_numbers = rand(F, steps)
-
-    for step in 1:steps
-        particle = coloid.particles[random_choices[step]]
-        if move_or_rotate[step]
-            accepted_moves += _one_mc_movement_periodic!(coloid, particle,
-                random_numbers[step], move_radius)
+    if isinf(interaction_strength)
+        if any(p -> is_overlapping(particle, p, periodic_boundary_shift(coloid.boxsize)),
+                filter(!=(particle), coloid.particles))
+            particle.vertices .= coloid._temp_vertices
+            particle.normals .= coloid._temp_normals
+            return 0
         else
-            accepted_rotations += _one_mc_rotation_periodic!(coloid, particle,
-                random_numbers[step], rotation_span)
+            return 1
+        end
+    else
+        newpot = sum(p -> potential(p, particle), filter(!=(particle), coloid.particles))
+        if ℯ^(interaction_strength * (prevpot - newpot)) > rnd2
+            return 1
+        else
+            particle.vertices .= coloid._temp_vertices
+            particle.normals .= coloid._temp_normals
+            return 0
         end
     end
-
-    all_moves = count(move_or_rotate)
-    return accepted_moves / all_moves, accepted_rotations / (steps - all_moves)
 end
 
-function _one_mc_movement_periodic!(coloid::Coloid, particle::AbstractPolygon,
-        random_number::Real, move_radius::Real)
-    coloid._temp_vertices .= particle.vertices
-    coloid._temp_center .= particle.center
-
-    move!(particle, (move_radius * random_number, move_radius * (1-random_number^2)))
-    apply_periodic_boundary!(particle, coloid.boxsize)
-
-    if any(p -> is_overlapping_periodic(particle, p, coloid.boxsize),
-            filter(!=(particle), coloid.particles))
-        particle.vertices .= coloid._temp_vertices
-        particle.center .= coloid._temp_center
-        return 0
-    else
-        return 1
-    end
-end
-
-function _one_mc_rotation_periodic!(coloid::Coloid, particle::AbstractPolygon,
-        random_number::Real, rotation_span::Real)
-    coloid._temp_vertices .= particle.vertices
-    coloid._temp_normals .= particle.normals
-
-    rotate!(particle, rotation_span * (random_number - 0.5))
-    apply_periodic_boundary!(particle, coloid.boxsize)
-
-    if any(p -> is_overlapping_periodic(particle, p, coloid.boxsize),
-            filter(!=(particle), coloid.particles))
-        particle.vertices .= coloid._temp_vertices
-        particle.normals .= coloid._temp_normals
-        return 0
-    else
-        return 1
-    end
-end
+periodic_boundary_shift(boxsize) = (
+    x -> (-(x[1] ÷ (boxsize[1]/2)) * boxsize[1],
+        -(x[2] ÷ (boxsize[2]/2)) * boxsize[2]))
