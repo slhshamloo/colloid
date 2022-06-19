@@ -104,7 +104,7 @@ function simulate!(coloid::Coloid, move_radius::Real, rotation_span::Real;
     # precalculate random numbers to speed-up calculations
     move_or_rotate = rand(Bool, steps) # true: move, false: rotate
     random_choices = rand(1:length(coloid.particles), steps)
-    random_numbers = rand(F, 2, steps)
+    rnd = rand(F, 3, steps)
 
     for step in 1:steps
         particle = coloid.particles[random_choices[step]]
@@ -113,15 +113,15 @@ function simulate!(coloid::Coloid, move_radius::Real, rotation_span::Real;
         end
         if move_or_rotate[step]
             accepted_moves += _one_mc_movement!(coloid, particle,
-                random_numbers[1, step], random_numbers[2, step], 
+                (rnd[1, step], rnd[2, step], rnd[3, step]),
                 move_radius, interaction_strength)
         else
             accepted_rotations += _one_mc_rotation!(coloid, particle,
-                random_numbers[1, step], random_numbers[2, step],
+                (rnd[1, step], rnd[2, step], rnd[3, step]),
                 rotation_span, interaction_strength)
         end
         if calculate
-            nematic_orders[step+1] = nematic_orders[step] + square_nematic_order(particle)
+            nematic_orders[step+1] += square_nematic_order(particle)
         end
     end
 
@@ -135,7 +135,7 @@ function simulate!(coloid::Coloid, move_radius::Real, rotation_span::Real;
 end
 
 function _one_mc_movement!(coloid::Coloid, particle::AbstractPolygon,
-        rnd1::Real, rnd2::Real, move_radius::Real, interaction_strength::Real)
+        rnd::Tuple{Vararg{<:Real}}, move_radius::Real, interaction_strength::Real)
     if !isinf(interaction_strength)
         prevpot = sum(p -> potential(p, particle, periodic_boundary_shift(coloid.boxsize)),
             filter(!=(particle), coloid.particles))
@@ -144,7 +144,7 @@ function _one_mc_movement!(coloid::Coloid, particle::AbstractPolygon,
     coloid._temp_vertices .= particle.vertices
     coloid._temp_center .= particle.center
 
-    move!(particle, (move_radius * rnd1, move_radius * (1-rnd1^2)))
+    move!(particle, (move_radius * (2rnd[1] - 1), move_radius * (2rnd[2] - 1)))
     apply_periodic_boundary!(particle, coloid.boxsize)
 
     if isinf(interaction_strength)
@@ -159,7 +159,7 @@ function _one_mc_movement!(coloid::Coloid, particle::AbstractPolygon,
     else
         newpot = sum(p -> potential(p, particle, periodic_boundary_shift(coloid.boxsize)),
             filter(!=(particle), coloid.particles))
-        if ℯ^(interaction_strength * (prevpot - newpot)) > rnd2
+        if ℯ^(interaction_strength * (prevpot - newpot)) > rnd[3]
             return 1
         else
             particle.vertices .= coloid._temp_vertices
@@ -170,7 +170,7 @@ function _one_mc_movement!(coloid::Coloid, particle::AbstractPolygon,
 end
 
 function _one_mc_rotation!(coloid::Coloid, particle::AbstractPolygon,
-        rnd1::Real, rnd2::Real, rotation_span::Real, interaction_strength::Real)
+        rnd::Tuple{Vararg{<:Real}}, rotation_span::Real, interaction_strength::Real)
     if !isinf(interaction_strength)
         prevpot = sum(p -> potential(p, particle, periodic_boundary_shift(coloid.boxsize)),
             filter(!=(particle), coloid.particles))
@@ -179,7 +179,7 @@ function _one_mc_rotation!(coloid::Coloid, particle::AbstractPolygon,
     coloid._temp_vertices .= particle.vertices
     coloid._temp_normals .= particle.normals
 
-    rotate!(particle, rotation_span * (rnd1 - 0.5))
+    rotate!(particle, rotation_span * (rnd[1] - 0.5))
 
     if isinf(interaction_strength)
         if any(p -> is_overlapping(particle, p, periodic_boundary_shift(coloid.boxsize)),
@@ -193,7 +193,7 @@ function _one_mc_rotation!(coloid::Coloid, particle::AbstractPolygon,
     else
         newpot = sum(p -> potential(p, particle, periodic_boundary_shift(coloid.boxsize)),
             filter(!=(particle), coloid.particles))
-        if ℯ^(interaction_strength * (prevpot - newpot)) > rnd2
+        if ℯ^(interaction_strength * (prevpot - newpot)) > rnd[3]
             return 1
         else
             particle.vertices .= coloid._temp_vertices
