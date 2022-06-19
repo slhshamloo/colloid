@@ -75,8 +75,8 @@ function add_random_particles!(coloid::Coloid, count::Integer)
     rnd = rand(3, count)
     for i in 1:count
         new_particle = eltype(coloid.particles)(coloid.particle_sidenum,
-            coloid.particle_radius, 2π / coloid.particle_sidenum * rnd[i, 1],
-            (coloid.boxsize[1] * rnd[i, 2], coloid.boxsize[2] * rnd[i, 3]))
+            coloid.particle_radius, 2π / coloid.particle_sidenum * rnd[1, i],
+            (coloid.boxsize[1] * rnd[2, i], coloid.boxsize[2] * rnd[3, i]))
         flag = true
         for particle in coloid.particles
             if is_overlapping(particle, new_particle)
