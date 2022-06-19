@@ -78,14 +78,14 @@ function add_random_particles!(coloid::Coloid, count::Integer)
             coloid.particle_radius, 2π / coloid.particle_sidenum * rnd[i, 1],
             (coloid.boxsize[1] * rnd[i, 2], coloid.boxsize[2] * rnd[i, 3]))
         flag = true
-        for particle in particles
+        for particle in coloid.particles
             if is_overlapping(particle, new_particle)
                 flag = false
                 break
             end
         end
         if flag
-            push!(particles, new_particle)
+            push!(coloid.particles, new_particle)
         end
     end
 end
