@@ -1,4 +1,4 @@
-struct colloid{F<:AbstractFloat}
+struct Colloid{F<:AbstractFloat}
     particle_sidenum::Integer
     particle_radius::Real
     boxsize::Tuple{<:Real, <:Real}
@@ -9,7 +9,7 @@ struct colloid{F<:AbstractFloat}
     _temp_normals::AbstractMatrix
     _temp_center::AbstractVector
 
-    function colloid{F}(particle_count::Integer, particle_sidenum::Integer,
+    function Colloid{F}(particle_count::Integer, particle_sidenum::Integer,
             particle_radius::Real, boxsize::Tuple{<:Real, <:Real}
             ) where {F<:AbstractFloat}
         if particle_sidenum % 2 == 0
@@ -26,9 +26,9 @@ struct colloid{F<:AbstractFloat}
     end
 end
 
-function colloid(particle_count::Integer, particle_sidenum::Integer,
+function Colloid(particle_count::Integer, particle_sidenum::Integer,
         particle_radius::Real, boxsize::Tuple{<:Real, <:Real})
-    colloid{Float64}(particle_count, particle_sidenum, particle_radius, boxsize)
+    Colloid{Float64}(particle_count, particle_sidenum, particle_radius, boxsize)
 end
 
 mutable struct colloidSimParams
@@ -49,7 +49,7 @@ function Base.:+(params1::colloidSimParams, params2::colloidSimParams)
         vcat(params1.nematic_orders, params2.nematic_orders))
 end
 
-function crystal_initialize!(colloid::colloid, gridwidth::Integer,
+function crystal_initialize!(colloid::Colloid, gridwidth::Integer,
         dist::Tuple{<:Real, <:Real}, offset::Tuple{<:Real, <:Real})
     for i in 1:length(colloid.particles)
         particle = colloid.particles[i]
@@ -61,7 +61,7 @@ function crystal_initialize!(colloid::colloid, gridwidth::Integer,
     end
 end
 
-function energy(colloid::colloid, interaction_strength::Real, index::Integer)
+function energy(colloid::Colloid, interaction_strength::Real, index::Integer)
     esum = 0.0
     for j in union(1:index-1, index+1:length(colloid.particles))
         esum += interaction_strength * potential(colloid.particles[index],
@@ -70,7 +70,7 @@ function energy(colloid::colloid, interaction_strength::Real, index::Integer)
     return esum
 end
 
-function energy(colloid::colloid, interaction_strength::Real)
+function energy(colloid::Colloid, interaction_strength::Real)
     esum = 0.0
     for i in 1:length(colloid.particles)-1
         for j in i+1:length(colloid.particles)
@@ -81,13 +81,13 @@ function energy(colloid::colloid, interaction_strength::Real)
     return esum
 end
 
-nematic_order(colloid::colloid) = mean(nematic_order, colloid.particles)
+nematic_order(colloid::Colloid) = mean(nematic_order, colloid.particles)
 
 function nematic_order(poly::AbstractPolygon)
     return (3 * max(poly.normals[1]^2, poly.normals[2]^2) - 1) / 2
 end
 
-function add_random_particle!(colloid::colloid)
+function add_random_particle!(colloid::Colloid)
     new_particle = eltype(colloid.particles)(colloid.particle_sidenum, colloid.particle_radius,
         2π / colloid.particle_sidenum * rand(),
         (colloid.boxsize[1] * rand(), colloid.boxsize[2] * rand()))
@@ -99,7 +99,7 @@ function add_random_particle!(colloid::colloid)
     push!(colloid.patricles, new_particle)
 end
 
-function add_random_particles!(colloid::colloid, count::Integer)
+function add_random_particles!(colloid::Colloid, count::Integer)
     rnd = rand(3, count)
     for i in 1:count
         new_particle = eltype(colloid.particles)(colloid.particle_sidenum,
@@ -118,7 +118,7 @@ function add_random_particles!(colloid::colloid, count::Integer)
     end
 end
 
-function simulate!(colloid::colloid, move_radius::Real, rotation_span::Real,
+function simulate!(colloid::Colloid, move_radius::Real, rotation_span::Real,
         interaction_strength::Real = Inf, steps::Integer = 100, calculate::Bool = false)
     F = typeof(colloid.particles[1].radius)
     move_radius, rotation_span = F(move_radius), F(rotation_span)
@@ -165,7 +165,7 @@ function simulate!(colloid::colloid, move_radius::Real, rotation_span::Real,
     end
 end
 
-function batchsim!(colloid::colloid,
+function batchsim!(colloid::Colloid,
         move_radii::Vector{<:Real}, rotation_spans::Vector{<:Real},
         interaction_strengths::Vector{<:Real} = [1.0, 3.0, 10.0, 100.0],
         steps::Vector{<:Integer} = [10000, 10000, 10000, 10000];
@@ -185,7 +185,7 @@ function batchsim!(colloid::colloid,
     end
 end
 
-function _one_mc_movement!(colloid::colloid, particle::AbstractPolygon,
+function _one_mc_movement!(colloid::Colloid, particle::AbstractPolygon,
         rnd::Tuple{Vararg{<:Real}}, move_radius::Real, interaction_strength::Real)
     if !isinf(interaction_strength)
         prevpot = sum(p -> potential(p, particle, periodic_boundary_shift(colloid.boxsize)),
@@ -223,7 +223,7 @@ function _one_mc_movement!(colloid::colloid, particle::AbstractPolygon,
     end
 end
 
-function _one_mc_rotation!(colloid::colloid, particle::AbstractPolygon,
+function _one_mc_rotation!(colloid::Colloid, particle::AbstractPolygon,
         rnd::Tuple{Vararg{<:Real}}, rotation_span::Real, interaction_strength::Real)
     if !isinf(interaction_strength)
         prevpot = sum(p -> potential(p, particle, periodic_boundary_shift(colloid.boxsize)),

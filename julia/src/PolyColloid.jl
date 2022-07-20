@@ -1,6 +1,6 @@
 module PolyColloid
 
-export colloid, simulate!, crystal_initialize!, batchsim!,
+export Colloid, simulate!, crystal_initialize!, batchsim!,
     add_random_particle!, add_random_particles!
 
 using RecipesBase
