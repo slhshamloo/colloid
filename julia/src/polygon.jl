@@ -8,7 +8,7 @@ A regular polygon with `sidenum` sides, side length `sidelen`, counter-clockwise
 about its center `angle`, and center coordinates `center`; first, one side is set to be
 prependicular to the x axis (the first axis), and the rotation angle is defined relative to
 this configuration. `F` is the floating point type. If not specified, it is set to
-`Float32`.
+`Float64`.
 """
 struct RegPoly{F<:AbstractFloat} <: AbstractPolygon
     sidenum::Integer
@@ -26,7 +26,7 @@ end
 
 function RegPoly(sidenum::Integer, radius::Real, angle::Real,
         center::Tuple{Vararg{<:Real}})
-    RegPoly{Float32}(sidenum, radius, angle, center)
+    RegPoly{Float64}(sidenum, radius, angle, center)
 end
 
 """
@@ -52,7 +52,7 @@ end
 
 function RegEvenPoly(sidenum::Integer, radius::Real, angle::Real,
         center::Tuple{Vararg{<:Real}})
-    RegEvenPoly{Float32}(sidenum, radius, angle, center)
+    RegEvenPoly{Float64}(sidenum, radius, angle, center)
 end
 
 @inline function _build_regpoly_attributes(F, sidenum::Integer, normalcount::Integer,
