@@ -1,4 +1,4 @@
-module Polycolloid
+module PolyColloid
 
 export colloid, simulate!, crystal_initialize!, batchsim!,
     add_random_particle!, add_random_particles!
