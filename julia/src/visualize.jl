@@ -30,4 +30,4 @@ end
     end
 end
 
-@recipe p(colloid::colloid) = colloid.particles
+@recipe p(colloid::Colloid) = colloid.particles

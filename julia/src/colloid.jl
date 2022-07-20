@@ -31,7 +31,7 @@ function Colloid(particle_count::Integer, particle_sidenum::Integer,
     Colloid{Float64}(particle_count, particle_sidenum, particle_radius, boxsize)
 end
 
-mutable struct colloidSimParams
+mutable struct ColloidSimParams
     all_moves::Integer
     all_rotations::Integer
     accepted_moves::Integer
@@ -40,8 +40,8 @@ mutable struct colloidSimParams
     nematic_orders::Vector{<:AbstractFloat}
 end
 
-function Base.:+(params1::colloidSimParams, params2::colloidSimParams)
-    return colloidSimParams(params1.all_moves + params2.all_moves,
+function Base.:+(params1::ColloidSimParams, params2::ColloidSimParams)
+    return ColloidSimParams(params1.all_moves + params2.all_moves,
         params1.all_rotations + params2.all_rotations,
         params1.accepted_moves + params2.accepted_moves,
         params1.accepted_rotations + params2.accepted_rotations,
@@ -158,7 +158,7 @@ function simulate!(colloid::Colloid, move_radius::Real, rotation_span::Real,
 
     all_moves = count(move_or_rotate)
     if calculate
-        return colloidSimParams(all_moves, steps - all_moves, accepted_moves,
+        return ColloidSimParams(all_moves, steps - all_moves, accepted_moves,
             accepted_rotations, energies, nematic_orders)
     else
         return accepted_moves / all_moves, accepted_rotations / (steps - all_moves)
@@ -171,7 +171,7 @@ function batchsim!(colloid::Colloid,
         steps::Vector{<:Integer} = [10000, 10000, 10000, 10000];
         calculate::Bool = false)
     if calculate
-        params = colloidSimParams(0, 0, 0, 0, Float64[], Float64[])
+        params = ColloidSimParams(0, 0, 0, 0, Float64[], Float64[])
         for i in 1:length(interaction_strengths)
             params += simulate!(colloid, move_radii[i], rotation_spans[i],
                 interaction_strengths[i], steps[i], true)
