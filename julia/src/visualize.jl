@@ -1,5 +1,9 @@
 function _get_nonperiodic_corners(poly::AbstractPolygon)
     θ₀ = π / poly.sidenum
+
+    if abs(poly.normals[1]) > 1
+        poly.normals[1] = round(poly.normals[1])
+    end
     angle = acos(poly.normals[1]) * sign(poly.normals[2])
     θs = [k * θ₀ + angle for k in 1:2:2poly.sidenum-1]
 
@@ -26,4 +30,4 @@ end
     end
 end
 
-@recipe p(coloid::Coloid) = coloid.particles
+@recipe p(colloid::colloid) = colloid.particles
