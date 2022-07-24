@@ -1,7 +1,7 @@
 struct Colloid{F<:AbstractFloat}
     particle_sidenum::Integer
     particle_radius::Real
-    boxsize::Tuple{<:Real, <:Real}
+    boxsize::AbstractVector
 
     particles::AbstractVector{<:AbstractPolygon}
     # for speeding up the reverting of monte carlo steps
@@ -17,7 +17,7 @@ struct Colloid{F<:AbstractFloat}
         else
             P = RegPoly
         end
-        boxsize = F.(boxsize)
+        boxsize = MVector{2, F}(boxsize)
         particles = [P{F}(particle_sidenum, particle_radius, rand(), Tuple(boxsize .* ratio))
             for ratio in eachcol(rand(F, 2, particle_count))]
         new(particle_sidenum, particle_radius, boxsize, particles,
@@ -27,7 +27,7 @@ struct Colloid{F<:AbstractFloat}
 end
 
 function Colloid(particle_count::Integer, particle_sidenum::Integer,
-        particle_radius::Real, boxsize::Tuple{<:Real, <:Real})
+        particle_radius::Real, boxsize::AbstractVector)
     Colloid{Float64}(particle_count, particle_sidenum, particle_radius, boxsize)
 end
 
@@ -87,6 +87,12 @@ function nematic_order(poly::AbstractPolygon)
     return (3 * max(poly.normals[1]^2, poly.normals[2]^2) - 1) / 2
 end
 
+function body_order(colloid::Colloid, index::Integer)
+    particle = colloid.particles[index]
+    return (particle.normals[1] + 1im * particle.normals[2]) * mean(
+        p -> p.normals[1] + 1im * p.normals[2], colloid.particles)
+end
+
 function add_random_particle!(colloid::Colloid)
     new_particle = eltype(colloid.particles)(colloid.particle_sidenum, colloid.particle_radius,
         2π / colloid.particle_sidenum * rand(),
@@ -119,7 +125,7 @@ function add_random_particles!(colloid::Colloid, count::Integer)
 end
 
 function simulate!(colloid::Colloid, move_radius::Real, rotation_span::Real,
-        interaction_strength::Real = Inf, steps::Integer = 100, calculate::Bool = false)
+        interaction_strength::Real = Inf; steps::Integer = 100, calculate::Bool = false)
     F = typeof(colloid.particles[1].radius)
     move_radius, rotation_span = F(move_radius), F(rotation_span)
 
@@ -167,20 +173,20 @@ end
 
 function batchsim!(colloid::Colloid,
         move_radii::Vector{<:Real}, rotation_spans::Vector{<:Real},
-        interaction_strengths::Vector{<:Real} = [1.0, 3.0, 10.0, 100.0],
-        steps::Vector{<:Integer} = [10000, 10000, 10000, 10000];
+        interaction_strengths::Vector{<:Real} = [1.0, 3.0, 10.0, 100.0];
+        steps::Vector{<:Integer} = [10000, 10000, 10000, 10000],
         calculate::Bool = false)
     if calculate
         params = ColloidSimParams(0, 0, 0, 0, Float64[], Float64[])
         for i in 1:length(interaction_strengths)
             params += simulate!(colloid, move_radii[i], rotation_spans[i],
-                interaction_strengths[i], steps[i], true)
+                interaction_strengths[i], steps = steps[i], calculate = true)
         end
         return params
     else
         for i in 1:length(interaction_strengths)
             simulate!(colloid, move_radius, rotation_span,
-                interaction_strengths[i], steps[i], false)
+                interaction_strengths[i], steps = steps[i], calculate = false)
         end
     end
 end
