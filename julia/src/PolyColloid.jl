@@ -11,6 +11,7 @@ include("polygon.jl")
 include("overlap.jl")
 include("potential.jl")
 include("colloid.jl")
+include("simulate.jl")
 include("visualize.jl")
 
 end
