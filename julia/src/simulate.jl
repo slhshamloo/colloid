@@ -28,7 +28,7 @@ function simulate!(colloid::Colloid, move_radius::Real, rotation_span::Real;
     # precalculate random numbers to speed-up calculations
     move_or_rotate = rand(Bool, steps) # true: move, false: rotate
     random_choices = rand(1:length(colloid.particles), steps)
-    rnd = rand(F, 3, steps)
+    rnd = rand(F, 2, steps)
 
     for step in 1:steps
         particle = colloid.particles[random_choices[step]]
@@ -36,11 +36,11 @@ function simulate!(colloid::Colloid, move_radius::Real, rotation_span::Real;
             nematic_orders[step+1] = nematic_orders[step] - nematic_order(particle)
         end
         if move_or_rotate[step]
-            accepted_moves += _one_mc_movement!(colloid, particle,
-                (rnd[1, step], rnd[2, step], rnd[3, step]), move_radius)
+            accepted_moves += _one_mc_movement!(colloid, random_choices[step],
+                (rnd[1, step], rnd[2, step]), move_radius)
         else
-            accepted_rotations += _one_mc_rotation!(colloid, particle,
-                (rnd[1, step], rnd[2, step]), rotation_span)
+            accepted_rotations += _one_mc_rotation!(colloid, random_choices[step],
+                rnd[1, step], rotation_span)
         end
         if calculate
             nematic_orders[step+1] += nematic_order(particle)
@@ -75,7 +75,7 @@ function batchsim!(colloid::Colloid,
     end
 end
 
-function _one_mc_movement!(colloid::Colloid, particle::AbstractPolygon,
+function _one_mc_movement!(colloid::Colloid, particle_index::Integer,
         rnd::Tuple{Vararg{<:Real}}, move_radius::Real)
     colloid._temp_vertices .= particle.vertices
     colloid._temp_center .= particle.center
@@ -86,8 +86,9 @@ function _one_mc_movement!(colloid::Colloid, particle::AbstractPolygon,
     move!(particle, (r * cos(θ), r * sin(θ)))
     apply_periodic_boundary!(particle, colloid.boxsize)
 
-    if any(p -> is_overlapping(particle, p, periodic_boundary_shift(colloid.boxsize)),
-            filter(!=(particle), colloid.particles))
+    if any(i -> is_overlapping(colloid.particles[particle_index], colloid.particles[i],
+                periodic_boundary_shift(colloid.boxsize)),
+            filter(!=(particle_index), 1:length(colloid.particles)))
         particle.vertices .= colloid._temp_vertices
         particle.center .= colloid._temp_center
         return 0
@@ -96,15 +97,15 @@ function _one_mc_movement!(colloid::Colloid, particle::AbstractPolygon,
     end
 end
 
-function _one_mc_rotation!(colloid::Colloid, particle::AbstractPolygon,
-        rnd::Tuple{Vararg{<:Real}}, rotation_span::Real)
+function _one_mc_rotation!(colloid::Colloid, particle_index::Integer,
+        rnd::Real, rotation_span::Real)
     colloid._temp_vertices .= particle.vertices
     colloid._temp_normals .= particle.normals
 
-    rotate!(particle, rotation_span * (rnd[1] - 0.5))
-
-    if any(p -> is_overlapping(particle, p, periodic_boundary_shift(colloid.boxsize)),
-            filter(!=(particle), colloid.particles))
+    rotate!(particle, rotation_span * (rnd - 0.5))
+    if any(i -> is_overlapping(colloid.particles[particle_index], colloid.particles[i],
+                periodic_boundary_shift(colloid.boxsize)),
+            filter(!=(particle_index), 1:length(colloid.particles)))
         particle.vertices .= colloid._temp_vertices
         particle.normals .= colloid._temp_normals
         return 0
