@@ -30,4 +30,9 @@ end
     end
 end
 
-@recipe p(colloid::Colloid) = colloid.particles
+@recipe function p(colloid::Colloid)
+    xlims --> (0, colloid.boxsize[1])
+    ylims --> (0, colloid.boxsize[2])
+    legend --> false
+    colloid.particles
+end
