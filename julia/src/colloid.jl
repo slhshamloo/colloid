@@ -64,7 +64,7 @@ function add_random_particle!(colloid::Colloid)
             return
         end
     end
-    push!(colloid.patricles, new_particle)
+    push!(colloid.particles, new_particle)
 end
 
 function add_random_particles!(colloid::Colloid, count::Integer)
