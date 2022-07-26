@@ -27,7 +27,7 @@ struct Colloid{F<:AbstractFloat}
 end
 
 function Colloid(particle_count::Integer, particle_sidenum::Integer,
-        particle_radius::Real, boxsize::AbstractVector)
+        particle_radius::Real, boxsize::Tuple{<:Real, <:Real})
     Colloid{Float64}(particle_count, particle_sidenum, particle_radius, boxsize)
 end
 
@@ -41,26 +41,6 @@ function crystal_initialize!(colloid::Colloid, gridwidth::Integer,
         particle.center .= new_center
         particle.vertices .+= warp
     end
-end
-
-function potenergy(colloid::Colloid, interaction_strength::Real, index::Integer)
-    esum = 0.0
-    for j in union(1:index-1, index+1:length(colloid.particles))
-        esum += interaction_strength * potential(colloid.particles[index],
-            colloid.particles[j], periodic_boundary_shift(colloid.boxsize))
-    end
-    return esum
-end
-
-function potenergy(colloid::Colloid, interaction_strength::Real)
-    esum = 0.0
-    for i in 1:length(colloid.particles)-1
-        for j in i+1:length(colloid.particles)
-            esum += interaction_strength * potential(colloid.particles[i],
-                colloid.particles[j], periodic_boundary_shift(colloid.boxsize))
-        end
-    end
-    return esum
 end
 
 nematic_order(colloid::Colloid) = mean(nematic_order, colloid.particles)
