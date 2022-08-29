@@ -1,1 +1,1 @@
-*.ipynb linguist-detectable=false
+/julia/*.ipynb linguist-detectable=false
