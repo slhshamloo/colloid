@@ -9,11 +9,11 @@ function is_overlapping(poly1::AbstractPolygon, poly2::AbstractPolygon,
     dist = (poly1.center[1] - poly2.center[1], poly1.center[2] - poly2.center[2])
     shift = boundary_shift(dist)
     dist = (dist[1] + shift[1], dist[2] + shift[2])
-    distnorm = √(dist[1]^2 + dist[2]^2)
+    distance_norm_squared = dist[1]^2 + dist[2]^2
 
-    if distnorm > poly1.radius + poly2.radius
+    if distance_norm_squared > (poly1.radius + poly2.radius)^2
         return false
-    elseif distnorm <= poly1.bisector + poly2.bisector
+    elseif distance_norm_squared <= (poly1.bisector + poly2.bisector)^2
         return true
     end
     
