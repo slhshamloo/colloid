@@ -1,8 +1,8 @@
 abstract type AbstractPolygon end
 
 """
-    RegPoly{F}(sidenum, radius, angle, center)
-    RegPoly(sidenum, radius, angle, center)
+    RegularPolygon{F}(sidenum, radius, angle, center)
+    RegularPolygon(sidenum, radius, angle, center)
 
 A regular polygon with `sidenum` sides, side length `sidelen`, counter-clockwise rotation
 about its center `angle`, and center coordinates `center`; first, one side is set to be
@@ -10,7 +10,7 @@ prependicular to the x axis (the first axis), and the rotation angle is defined 
 this configuration. `F` is the floating point type. If not specified, it is set to
 `Float64`.
 """
-struct RegPoly{F<:AbstractFloat} <: AbstractPolygon
+struct RegularPolygon{F<:AbstractFloat} <: AbstractPolygon
     sidenum::Integer
     radius::F
     bisector::F
@@ -18,25 +18,25 @@ struct RegPoly{F<:AbstractFloat} <: AbstractPolygon
     vertices::AbstractMatrix
     normals::AbstractMatrix
 
-    function RegPoly{F}(sidenum::Integer, radius::Real, angle::Real,
+    function RegularPolygon{F}(sidenum::Integer, radius::Real, angle::Real,
             center::Tuple{Vararg{<:Real}}) where {F<:AbstractFloat}
         new{F}(_build_regpoly_attributes(F, sidenum, sidenum, radius, angle, center)...)
     end
 end
 
-function RegPoly(sidenum::Integer, radius::Real, angle::Real,
+function RegularPolygon(sidenum::Integer, radius::Real, angle::Real,
         center::Tuple{Vararg{<:Real}})
-    RegPoly{Float64}(sidenum, radius, angle, center)
+    RegularPolygon{Float64}(sidenum, radius, angle, center)
 end
 
 """
-    RegEvenPoly{F}(sidenum, radius, angle, center)
-    RegEvenPoly(sidenum, radius, angle, center)
+    RegularEvenPolygon{F}(sidenum, radius, angle, center)
+    RegularEvenPolygon(sidenum, radius, angle, center)
 
-Like `RegPoly`, but optimized for even-sided polygons; only half of the normals are stored
-as the other half are just mirrored versions of the stored half.
+Like `RegularPolygon`, but optimized for even-sided polygons; only half of the
+normals are stored as the other half are just mirrored versions of the stored half.
 """
-struct RegEvenPoly{F<:AbstractFloat} <: AbstractPolygon
+struct RegularEvenPolygon{F<:AbstractFloat} <: AbstractPolygon
     sidenum::Integer
     radius::F
     bisector::F
@@ -44,15 +44,15 @@ struct RegEvenPoly{F<:AbstractFloat} <: AbstractPolygon
     vertices::AbstractMatrix
     normals::AbstractMatrix
 
-    function RegEvenPoly{F}(sidenum::Integer, radius::Real, angle::Real,
+    function RegularEvenPolygon{F}(sidenum::Integer, radius::Real, angle::Real,
             center::Tuple{Vararg{<:Real}}) where {F<:AbstractFloat}
         new{F}(_build_regpoly_attributes(F, sidenum, sidenum÷2, radius, angle, center)...)
     end
 end
 
-function RegEvenPoly(sidenum::Integer, radius::Real, angle::Real,
+function RegularEvenPolygon(sidenum::Integer, radius::Real, angle::Real,
         center::Tuple{Vararg{<:Real}})
-    RegEvenPoly{Float64}(sidenum, radius, angle, center)
+    RegularEvenPolygon{Float64}(sidenum, radius, angle, center)
 end
 
 @inline function _build_regpoly_attributes(F, sidenum::Integer, normalcount::Integer,
@@ -112,11 +112,11 @@ end
 
 Apply periodic boundary conditions with the given box dimensions `boxsize`
 """
-@inline function apply_periodic_boundary!(poly::AbstractPolygon,
-        boxsize::AbstractVector)
+@inline function apply_periodic_boundary!(
+        poly::AbstractPolygon, boxsize::AbstractVector)
     old_center = (poly.center[1], poly.center[2])
-    poly.center[1] = (poly.center[1] + boxsize[1]) % boxsize[1]
-    poly.center[2] = (poly.center[2] + boxsize[2]) % boxsize[2]
+    poly.center[1] -= poly.center[1] ÷ (boxsize[1] / 2) * boxsize[1]
+    poly.center[2] -= poly.center[2] ÷ (boxsize[2] / 2) * boxsize[2]
     shift = (poly.center[1] - old_center[1], poly.center[2] - old_center[2])
     poly.vertices .+= shift
 end
