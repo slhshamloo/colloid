@@ -1,91 +1,139 @@
-struct Colloid{F<:AbstractFloat}
-    particle_sidenum::Integer
-    particle_radius::Real
-    boxsize::AbstractVector
+struct Colloid{A<:AbstractArray, T<:Real}
+    sidenum::Integer
+    radius::T
+    bisector::T # for speeding up calculations
+    boxsize::MVector
 
-    particles::AbstractVector{<:AbstractPolygon}
-    # for speeding up the reverting of monte carlo steps
-    _temp_vertices::AbstractMatrix
-    _temp_normals::AbstractMatrix
-    _temp_center::AbstractVector
+    centers::A
+    vertices::A
+    normals::A
 
-    function Colloid{F}(particle_count::Integer, particle_sidenum::Integer,
-            particle_radius::Real, boxsize::Tuple{<:Real, <:Real}
-            ) where {F<:AbstractFloat}
-        if particle_sidenum % 2 == 0
-            P = RegEvenPoly
+    # for speeding up monte carlo step rejection
+    _temp_shifts::A
+    _temp_centers::A
+    _temp_vertices::A
+    _temp_normals::A
+
+    function Colloid{A, T}(particle_count::Integer, sidenum::Integer, radius::Real,
+                           boxsize::Tuple{<:Real, <:Real}) where {A<:AbstractArray, T<:Real}
+        boxsize = MVector{2, T}(boxsize)
+        bisector = radius * cos(π / sidenum)
+        normalnum = sidenum % 2 == 0 ? sidenum ÷ 2 : sidenum
+
+        centers = Matrix{T}(undef, 2, particle_count)
+        vertices, normals = _build_vertices_and_normals(
+            T, sidenum, normalnum, radius, centers, zeros(particle_count))
+        centers = _build_array(A, T, (2, particle_count), centers)
+        vertices = _build_array(A, T, (2, sidenum, particle_count), vertices)
+        normals = _build_array(A, T, (2, normalnum, particle_count), normals)
+
+        temp_shifts = similar(centers)
+        temp_centers = copy(centers)
+        temp_vertices = copy(vertices)
+        temp_normals = copy(normals)
+
+        new{A, T}(sidenum, radius, bisector, boxsize, centers, vertices, normals,
+                  temp_shifts, temp_centers, temp_vertices, temp_normals)
+    end
+end
+
+function _build_array(A::UnionAll, T::DataType, dims::Tuple{Vararg{<:Integer}}, content)
+    if A <: StaticArray
+        return A{Tuple{dims...}, T}(content)
+    else
+        return A{T, length(dims)}(content)
+    end
+end
+
+function _build_vertices_and_normals(T::DataType, sidenum::Integer, normalnum::Integer,
+        radius::Real, centers::AbstractMatrix, angles::AbstractVector)
+    vertices = Array{T, 3}(undef, 2, sidenum, size(centers, 2))
+    normals = Array{T, 3}(undef, 2, normalnum, size(centers, 2))
+    for particle in eachindex(angles)
+        θs = (k * π / sidenum + angles[particle] for k in 0:2:2sidenum-2)
+        @. vertices[1, :, particle] = radius * cos(θs)
+        @. vertices[2, :, particle] = radius * sin(θs)
+        vertices[:, :, particle] .+= centers[:, particle]
+
+        θs = (k * π / sidenum + angles[particle] for k in 1:2:2normalnum-1)
+        @. normals[1, :, particle] = cos(θs)
+        @. normals[2, :, particle] = sin(θs)
+    end
+    return vertices, normals
+end
+
+function build_configuration!(colloid::Colloid, centers::AbstractMatrix,
+                              angles::AbstractVector)
+    vertices, normals = _build_vertices_and_normals(
+        eltype(colloid.centers), colloid.sidenum, size(colloid.normals, 2),
+        colloid.radius, centers, angles)
+    colloid.centers .= centers
+    colloid._temp_centers .= centers
+    colloid.vertices .= vertices
+    colloid._temp_vertices .= vertices
+    colloid.normals .= normals
+    colloid._temp_normals .= normals
+end
+
+function crystallize!(colloid::Colloid)
+    particles_per_side = ceil(Int, √(size(colloid.centers, 2)))
+    shortside = minimum(colloid.boxsize)
+    shortdim = argmin(colloid.boxsize)
+    gap = shortside / particles_per_side
+
+    repvals = range((-shortside + gap) / 2, (shortside - gap) / 2, particles_per_side)
+    shortpos = repeat(repvals, particles_per_side)
+    longpos = repeat(repvals, inner=particles_per_side)
+
+    xs = shortdim == 1 ? shortpos : longpos
+    ys = shortdim == 2 ? shortpos : longpos
+    centers = permutedims(hcat(xs, ys))
+    centers = centers[:, 1:size(colloid.centers, 2)]
+    build_configuration!(colloid, centers, zeros(size(colloid.centers, 2)))
+end
+
+@inline function apply_periodic_boundary!(colloid::Colloid)
+    @. colloid._temp_shifts = -colloid.centers ÷ (colloid.boxsize / 2) * colloid.boxsize
+    colloid.centers .+= colloid._temp_shifts
+    colloid.vertices .+= reshape(colloid._temp_shifts, 2, 1, size(colloid.centers, 2))
+end
+
+@inline function move!(colloid::Colloid, idx::Integer, x::Real, y::Real)
+    colloid.centers[1, idx] += x
+    colloid.centers[2, idx] += y
+    colloid.vertices[:, :, idx] .+= (x, y)
+end
+
+@inline function rotate!(colloid::Colloid, idx::Integer, angle::Real)
+    colloid.vertices[:, :, idx] .-= colloid.centers[:, idx]
+    for v in 1:colloid.sidenum
+        temp = (colloid.vertices[1, v, idx] * cos(angle)
+            - colloid.vertices[2, v, idx] * sin(angle))
+        colloid.vertices[2, v, idx] = (colloid.vertices[1, v, idx] * sin(angle)
+            + colloid.vertices[2, v, idx] * cos(angle))
+        colloid.vertices[1, v, idx] = temp
+    end
+    colloid.vertices[:, :, idx] .+= colloid.centers[:, idx]
+
+    for n in 1:size(colloid.normals, 2)
+        temp = (colloid.normals[1, n, idx] * cos(angle)
+            - colloid.normals[2, n, idx] * sin(angle))
+        colloid.normals[2, n, idx] = (colloid.normals[1, n, idx] * sin(angle)
+            + colloid.normals[2, n, idx] * cos(angle))
+        colloid.normals[1, n, idx] = temp
+    end
+end
+
+function apply_moves!(colloid::Colloid, move_radius::Real, rotation_span::Real,
+                      translate_or_rotate::AbstractVector, randnums::AbstractMatrix)
+    for particle in 1:size(colloid.centers, 2)
+        if translate_or_rotate[particle]
+            r = move_radius * randnums[1, particle]
+            θ = π * randnums[2, particle]
+            move!(colloid, particle, r * cos(θ), r * sin(θ))
         else
-            P = RegPoly
-        end
-        boxsize = MVector{2, F}(boxsize)
-        particles = [P{F}(particle_sidenum, particle_radius, rand(), Tuple(boxsize .* ratio))
-            for ratio in eachcol(rand(F, 2, particle_count))]
-        new(particle_sidenum, particle_radius, boxsize, particles,
-            similar(particles[1].vertices), similar(particles[1].normals),
-            similar(particles[1].center))
-    end
-end
-
-function Colloid(particle_count::Integer, particle_sidenum::Integer,
-        particle_radius::Real, boxsize::Tuple{<:Real, <:Real})
-    Colloid{Float64}(particle_count, particle_sidenum, particle_radius, boxsize)
-end
-
-function crystal_initialize!(colloid::Colloid, gridwidth::Integer,
-        dist::Tuple{<:Real, <:Real}, offset::Tuple{<:Real, <:Real})
-    for i in 1:length(colloid.particles)
-        particle = colloid.particles[i]
-        new_center = (offset[1] + dist[1] * ((i-1) ÷ gridwidth),
-            offset[2] + dist[2] * ((i-1) % gridwidth))
-        warp = new_center .- particle.center
-        particle.center .= new_center
-        particle.vertices .+= warp
-    end
-end
-
-nematic_order(colloid::Colloid) = mean(nematic_order, colloid.particles)
-
-function nematic_order(poly::AbstractPolygon)
-    return (3 * max(poly.normals[1]^2, poly.normals[2]^2) - 1) / 2
-end
-
-function body_order(colloid::Colloid, index::Integer)
-    particle = colloid.particles[index]
-    return (particle.normals[1] + 1im * particle.normals[2]) * mean(
-        p -> p.normals[1] + 1im * p.normals[2], colloid.particles)
-end
-
-function add_random_particle!(colloid::Colloid)
-    new_particle = eltype(colloid.particles)(colloid.particle_sidenum, colloid.particle_radius,
-        2π / colloid.particle_sidenum * rand(),
-        (colloid.boxsize[1] * rand(), colloid.boxsize[2] * rand()))
-    for particle in colloid.particles
-        if is_overlapping(particle, new_particle)
-            return
+            rotate!(colloid, particle, rotation_span * randnums[1, particle])
         end
     end
-    push!(colloid.particles, new_particle)
+    apply_periodic_boundary!(colloid)
 end
-
-function add_random_particles!(colloid::Colloid, count::Integer)
-    rnd = rand(3, count)
-    for i in 1:count
-        new_particle = eltype(colloid.particles)(colloid.particle_sidenum,
-            colloid.particle_radius, 2π / colloid.particle_sidenum * rnd[1, i],
-            (colloid.boxsize[1] * rnd[2, i], colloid.boxsize[2] * rnd[3, i]))
-        flag = true
-        for particle in colloid.particles
-            if is_overlapping(particle, new_particle)
-                flag = false
-                break
-            end
-        end
-        if flag
-            push!(colloid.particles, new_particle)
-        end
-    end
-end
-
-periodic_boundary_shift(boxsize) = (
-    x -> (-(x[1] ÷ (boxsize[1]/2)) * boxsize[1],
-        -(x[2] ÷ (boxsize[2]/2)) * boxsize[2]))

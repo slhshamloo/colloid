@@ -1,32 +1,36 @@
-"""
-    is_overlapping(poly1::AbstractPolygon, poly2::AbstractPolygon)
+function is_overlapping(colloid::Colloid, i::Integer, j::Integer)
+    dist = (colloid.centers[1, i] - colloid.centers[1, j],
+            colloid.centers[2, i] - colloid.centers[2, j])
 
-Check whether or not `poly1` and `poly2` are is_overlapping. The function is optimized
-for even polygons.
-"""
-function is_overlapping(poly1::AbstractPolygon, poly2::AbstractPolygon,
-        boundary_shift::Function = x -> (0, 0))
-    dist = (poly1.center[1] - poly2.center[1], poly1.center[2] - poly2.center[2])
-    shift = boundary_shift(dist)
-    dist = (dist[1] + shift[1], dist[2] + shift[2])
-    distance_norm_squared = dist[1]^2 + dist[2]^2
-
-    if distance_norm_squared > (poly1.radius + poly2.radius)^2
-        return false
-    elseif distance_norm_squared <= (poly1.bisector + poly2.bisector)^2
-        return true
+    if dist[1] > colloid.boxsize[1] / 2 || dist[2] > colloid.boxsize[2] / 2
+        shift = (-(dist[1] ÷ (colloid.boxsize[1]/2)) * colloid.boxsize[1],
+                 -(dist[2] ÷ (colloid.boxsize[2]/2)) * colloid.boxsize[2])
+        dist = (dist[1] + shift[1], dist[2] + shift[2])
+        is_vertex_outside_normal = (colloid.sidenum % 2 == 0 ?
+            (c, ii, jj, v, n) -> _is_vertex_outside_normal_even_p(c, ii, jj, v, n, shift)
+            : (c, ii, jj, v, n) -> _is_vertex_outside_normal_odd_p(c, ii, jj, v, n, shift))
+    else
+        is_vertex_outside_normal = (colloid.sidenum % 2 == 0 ?
+            _is_vertex_outside_normal_even : _is_vertex_outside_normal_odd)
     end
-    
-    return (_is_vertex_overlapping(poly1, poly2, shift)
-        || _is_vertex_overlapping(poly2, poly1, shift))
+
+    dist_norm_squared = dist[1]^2 + dist[2]^2
+    if dist_norm_squared <= 4 * colloid.bisector^2
+        return true
+    elseif dist_norm_squared > 4 * colloid.radius^2
+        return false
+    end
+
+    return (_is_vertex_overlapping(colloid, i, j, is_vertex_outside_normal)
+        || _is_vertex_overlapping(colloid, j, i, is_vertex_outside_normal))
 end
 
-function _is_vertex_overlapping(refpoly::AbstractPolygon, testpoly::AbstractPolygon,
-        shift::Tuple{Vararg{<:Real}})
-    for vertex in eachcol(testpoly.vertices)
+function _is_vertex_overlapping(colloid::Colloid, i::Integer, j::Integer,
+        is_vertex_outside_normal::Function)
+    for v in 1:colloid.sidenum
         overlap = true
-        for normal in eachcol(refpoly.normals)
-            if _is_vertex_outside_normal(refpoly, vertex, normal, shift)
+        for n in 1:size(colloid.normals, 2)
+            if is_vertex_outside_normal(colloid, i, j, v, n)
                 overlap = false
                 break
             end
@@ -38,22 +42,40 @@ function _is_vertex_overlapping(refpoly::AbstractPolygon, testpoly::AbstractPoly
     return false
 end
 
-macro vertexdot(vertex, center, normal, shift)
-    quote
-        (($(esc(vertex))[1] - $(esc(center))[1] + $(esc(shift))[1]) * $(esc(normal))[1]
-        + ($(esc(vertex))[2] - $(esc(center))[2] + $(esc(shift))[2]) * $(esc(normal))[2])
-    end
+@inline function _is_vertex_outside_normal_even(
+        colloid::Colloid, i::Integer, j::Integer, v::Integer, n::Integer)
+    projection = (
+        (colloid.vertices[1, v, i] - colloid.centers[1, j]) * colloid.normals[1, n, j]
+        + (colloid.vertices[2, v, i] - colloid.centers[2, j]) * colloid.normals[2, n, j])
+    return projection > colloid.bisector || projection < -colloid.bisector
 end
 
-@inline function _is_vertex_outside_normal(refpoly::RegPoly,
-        vertex::AbstractVector{<:Real}, normal::AbstractVector{<:Real},
-        shift::Tuple{Vararg{<:Real}})
-    return @vertexdot(vertex, refpoly.center, normal, shift) > refpoly.bisector
+@inline function _is_vertex_outside_normal_odd(
+        colloid::Colloid, i::Integer, j::Integer, v::Integer, n::Integer)
+    projection = (
+        (colloid.vertices[1, v, i] - colloid.centers[1, j]) * colloid.normals[1, n, j]
+        + (colloid.vertices[2, v, i] - colloid.centers[2, j]) * colloid.normals[2, n, j])
+    return projection > colloid.bisector
 end
 
-@inline function _is_vertex_outside_normal(refpoly::RegEvenPoly,
-        vertex::AbstractVector{<:Real}, normal::AbstractVector{<:Real},
+@inline function _is_vertex_outside_normal_even_p(
+        colloid::Colloid, i::Integer, j::Integer, v::Integer, n::Integer,
         shift::Tuple{Vararg{<:Real}})
-    projected_distance = @vertexdot(vertex, refpoly.center, normal, shift)
-    return projected_distance > refpoly.bisector || projected_distance < -refpoly.bisector
+    projection = (
+        (colloid.vertices[1, v, i] - colloid.centers[1, j] + shift[1])
+            * colloid.normals[1, n, j]
+        + (colloid.vertices[2, v, i] - colloid.centers[2, j] + shift[2])
+            * colloid.normals[2, n, j])
+    return projection > colloid.bisector || projection < -colloid.bisector
+end
+
+@inline function _is_vertex_outside_normal_odd_p(
+        colloid::Colloid, i::Integer, j::Integer, v::Integer, n::Integer,
+        shift::Tuple{Vararg{<:Real}})
+    projection = (
+        (colloid.vertices[1, v, i] - colloid.centers[1, j] + shift[1])
+            * colloid.normals[1, n, j]
+        + (colloid.vertices[2, v, i] - colloid.centers[2, j] + shift[2])
+            * colloid.normals[2, n, j])
+    return projection > colloid.bisector
 end
