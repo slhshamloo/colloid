@@ -37,6 +37,8 @@ struct Colloid{A<:AbstractArray, T<:Real}
     end
 end
 
+particle_count(colloid::Colloid) = size(colloid.centers, 2)
+
 function _build_array(A::UnionAll, T::DataType, dims::Tuple{Vararg{<:Integer}}, content)
     if A <: StaticArray
         return A{Tuple{dims...}, T}(content)
@@ -76,26 +78,27 @@ function build_configuration!(colloid::Colloid, centers::AbstractMatrix,
 end
 
 function crystallize!(colloid::Colloid)
-    particles_per_side = ceil(Int, √(size(colloid.centers, 2)))
+    particles_per_side = ceil(Int, √(particle_count(colloid)))
     shortside = minimum(colloid.boxsize)
     shortdim = argmin(colloid.boxsize)
-    gap = shortside / particles_per_side
+    spacing = shortside / particles_per_side
 
-    repvals = range((-shortside + gap) / 2, (shortside - gap) / 2, particles_per_side)
+    repvals = range((-shortside + spacing) / 2, (shortside - spacing) / 2,
+                    particles_per_side)
     shortpos = repeat(repvals, particles_per_side)
     longpos = repeat(repvals, inner=particles_per_side)
 
     xs = shortdim == 1 ? shortpos : longpos
     ys = shortdim == 2 ? shortpos : longpos
     centers = permutedims(hcat(xs, ys))
-    centers = centers[:, 1:size(colloid.centers, 2)]
-    build_configuration!(colloid, centers, zeros(size(colloid.centers, 2)))
+    centers = centers[:, 1:particle_count(colloid)]
+    build_configuration!(colloid, centers, zeros(particle_count(colloid)))
 end
 
 @inline function apply_periodic_boundary!(colloid::Colloid)
     @. colloid._temp_shifts = -colloid.centers ÷ (colloid.boxsize / 2) * colloid.boxsize
     colloid.centers .+= colloid._temp_shifts
-    colloid.vertices .+= reshape(colloid._temp_shifts, 2, 1, size(colloid.centers, 2))
+    colloid.vertices .+= reshape(colloid._temp_shifts, 2, 1, particle_count(colloid))
 end
 
 @inline function move!(colloid::Colloid, idx::Integer, x::Real, y::Real)
@@ -126,7 +129,7 @@ end
 
 function apply_moves!(colloid::Colloid, move_radius::Real, rotation_span::Real,
                       translate_or_rotate::AbstractVector, randnums::AbstractMatrix)
-    for particle in 1:size(colloid.centers, 2)
+    for particle in 1:particle_count(colloid)
         if translate_or_rotate[particle]
             r = move_radius * randnums[1, particle]
             θ = π * randnums[2, particle]

@@ -1,7 +1,7 @@
 function get_cell_list(colloid::Colloid)
     cell_list = [Int[] for i in 1:Int.(colloid.boxsize[1] ÷ (2 * colloid.radius) + 1),
                            j in 1:Int.(colloid.boxsize[2] ÷ (2 * colloid.radius) + 1)]
-    for idx in 1:size(colloid.centers, 2)
+    for idx in 1:particle_count(colloid)
         push!(cell_list[
                 Int((colloid.centers[1, idx] + colloid.boxsize[1] / 2)
                     ÷ (2 * colloid.radius) + 1),

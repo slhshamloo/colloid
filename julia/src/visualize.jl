@@ -1,7 +1,7 @@
 @recipe function p(colloid::Colloid)
     boxsize = Array(colloid.boxsize)
     vertices = Array(colloid.vertices)
-    for particle in 1:size(colloid.centers, 2)
+    for particle in 1:particle_count(colloid)
         @series begin
             seriestype := :shape
             fillcolor --> :mediumblue
