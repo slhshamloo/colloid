@@ -12,28 +12,13 @@ function get_cell_list(colloid::Colloid)
     return cell_list
 end
 
-function has_overlap(colloid::Colloid)
-    cell_list = get_cell_list(colloid)
-    for idx in CartesianIndices(cell_list)
-        i, j = Tuple(idx)
-        for m in eachindex(cell_list[idx])
-            for n in m+1:length(cell_list[idx])
-                if is_overlapping(colloid, cell_list[idx][m], cell_list[idx][n])
-                    return true
-                end
-            end
-            if (i + j) % 2 == 0
-                if check_orthogonal_overlap(colloid, cell_list, i, j, cell_list[idx][m])
-                    return true
-                end
-            end
-            if i % 2 == 0
-                if check_diagonal_overlap(colloid, cell_list, i, j, cell_list[idx][m])
-                    return true
-                end
-            end
-        end
+function has_overlap(colloid::Colloid, cell_list::Matrix{Vector{Int}},
+                     idx::Integer, i::Integer, j::Integer)   
+    for n in cell_list[i, j]
+        if n != idx && is_overlapping(colloid, n, idx) return true end
     end
+    if check_orthogonal_overlap(colloid, cell_list, i, j, idx) return true end
+    if check_diagonal_overlap(colloid, cell_list, i, j, idx) return true end
     return false
 end
 

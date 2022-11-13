@@ -107,6 +107,14 @@ end
     colloid.vertices[:, :, idx] .+= (x, y)
 end
 
+@inline function apply_periodic_boundary!(colloid::Colloid, idx::Integer)
+    shift = (-colloid.centers[1, idx] ÷ (colloid.boxsize[1] / 2) * colloid.boxsize[1],
+        -colloid.centers[2, idx] ÷ (colloid.boxsize[2] / 2) * colloid.boxsize[2])
+    colloid.centers[1, idx] += shift[1]
+    colloid.centers[2, idx] += shift[2]
+    colloid.vertices[:, :, idx] .+= shift
+end
+
 @inline function rotate!(colloid::Colloid, idx::Integer, angle::Real)
     colloid.vertices[:, :, idx] .-= colloid.centers[:, idx]
     for v in 1:colloid.sidenum
@@ -125,18 +133,4 @@ end
             + colloid.normals[2, n, idx] * cos(angle))
         colloid.normals[1, n, idx] = temp
     end
-end
-
-function apply_moves!(colloid::Colloid, move_radius::Real, rotation_span::Real,
-                      translate_or_rotate::AbstractVector, randnums::AbstractMatrix)
-    for particle in 1:particle_count(colloid)
-        if translate_or_rotate[particle]
-            r = move_radius * randnums[1, particle]
-            θ = π * randnums[2, particle]
-            move!(colloid, particle, r * cos(θ), r * sin(θ))
-        else
-            rotate!(colloid, particle, rotation_span * randnums[1, particle])
-        end
-    end
-    apply_periodic_boundary!(colloid)
 end

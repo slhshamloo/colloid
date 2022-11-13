@@ -1,5 +1,11 @@
 abstract type AbstractRecorder end
 
+struct ColloidSnapshot
+    centers::AbstractMatrix
+    angles::AbstractVector
+    boxsize::Tuple{<:Real, <:Real}
+end
+
 struct TrajectoryRecorder
     snapshots::Vector{ColloidSnapshot}
     cond::Function
@@ -7,12 +13,6 @@ struct TrajectoryRecorder
     function TrajectoryRecorder(cond)
         new(ColloidSnapshot[], cond)
     end
-end
-
-struct ColloidSnapshot
-    centers::AbstractMatrix
-    angles::AbstractVector
-    boxsize::Tuple{<:Real, <:Real}
 end
 
 function record(recorder::TrajectoryRecorder, colloid::Colloid, timestep::Integer)
