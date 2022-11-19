@@ -6,7 +6,7 @@ struct ColloidSnapshot
     boxsize::Tuple{<:Real, <:Real}
 end
 
-struct TrajectoryRecorder
+struct TrajectoryRecorder <: AbstractRecorder
     snapshots::Vector{ColloidSnapshot}
     cond::Function
 
@@ -15,9 +15,9 @@ struct TrajectoryRecorder
     end
 end
 
-function record(recorder::TrajectoryRecorder, colloid::Colloid, timestep::Integer)
-    if recorder.cond(timestep)
-        push!(recorder.snapshots, get_snapshot(colloid))
+function record!(sim::Simulation, recorder::TrajectoryRecorder)
+    if recorder.cond(sim.timestep)
+        push!(recorder.snapshots, get_snapshot(sim.colloid))
     end
 end
 
