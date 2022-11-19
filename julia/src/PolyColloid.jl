@@ -14,6 +14,7 @@ include("constraint.jl")
 include("record.jl")
 include("update.jl")
 include("simulate.jl")
+include("operations.jl")
 include("visualize.jl")
 
 end

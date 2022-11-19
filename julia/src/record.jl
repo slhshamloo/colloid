@@ -15,12 +15,6 @@ struct TrajectoryRecorder <: AbstractRecorder
     end
 end
 
-function record!(sim::Simulation, recorder::TrajectoryRecorder)
-    if recorder.cond(sim.timestep)
-        push!(recorder.snapshots, get_snapshot(sim.colloid))
-    end
-end
-
 function get_snapshot(colloid::Colloid)
     normals = Array(colloid.normals)
     angles = Vector{eltype(centers)}(undef, particle_count(colloid))
