@@ -18,6 +18,7 @@ mutable struct Simulation
 
     numtype::DataType
     uses_gpu::Bool
+    random_engine::AbstractRNG
 
     function Simulation(particle_count::Integer, sidenum::Integer, radius::Real,
                         boxsize::Tuple{<:Real, <:Real}; seed::Integer=-1, use_gpu=false,
@@ -26,30 +27,43 @@ mutable struct Simulation
             seed = rand(0:65535)
         end
         random_engine = MersenneTwister(seed)
-        _rand = (x...) -> rand(random_engine, x...)
         colloid = Colloid{Array, Float64}(particle_count, sidenum, radius, boxsize)
         new(colloid, seed, 0, zero(numtype), zero(numtype), 0, 0, 0, 0,
             AbstractConstraint[], AbstractRecorder[], AbstractUpdater[],
-            numtype, use_gpu)
+            numtype, use_gpu, random_engine)
     end
 end
 
 function run!(sim::Simulation, timesteps::Integer)
     (sim.accepted_translations, sim.rejected_translations,
         sim.accepted_rotations, sim.rejected_rotations) = (0, 0, 0, 0)
+    if !sim.uses_gpu
+        cell_list = get_cell_list(sim.colloid)
+    end
+
     for _ in 1:timesteps
         if !sim.uses_gpu
-            apply_step!(sim)
+            apply_step!(sim, cell_list)
         end
+
+        for updater in sim.updaters
+            cell_list = update!(sim, updater, cell_list)
+        end
+        for constraint in sim.constraints
+            constraint.update!(sim, constraint)
+        end
+        for recorder in sim.recorders
+            record!(sim, recorder)
+        end
+
         sim.timestep += 1
     end
 end
 
-@inline function apply_step!(sim::Simulation)
-    cell_list = get_cell_list(sim.colloid)
-    translate_or_rotate = rand(Bool, particle_count(sim.colloid))
-    randnums = rand(sim.numtype, 2, particle_count(sim.colloid))
-    iter = (rand(Bool) ?
+function apply_step!(sim::Simulation, cell_list::Matrix{Vector{Int}})
+    translate_or_rotate = rand(sim.random_engine, Bool, particle_count(sim.colloid))
+    randnums = rand(sim.random_engine, sim.numtype, 2, particle_count(sim.colloid))
+    iter = (rand(sim.random_engine, Bool) ?
         range(1, particle_count(sim.colloid))
         : range(particle_count(sim.colloid), 1, step=-1)
     )
@@ -63,28 +77,24 @@ end
     return true
 end
 
-@inline function apply_translation!(sim::Simulation, cell_list::Matrix{Vector{Int}},
-                                    randnums::Matrix{<:Real}, idx::Int)
+function apply_translation!(sim::Simulation, cell_list::Matrix{Vector{Int}},
+                            randnums::Matrix{<:Real}, idx::Int)
     r = sim.move_radius * randnums[1, idx]
     θ = 2π * randnums[2, idx]
 
-    i = Int((sim.colloid.centers[1, idx] + sim.colloid.boxsize[1] / 2)
-            ÷ (2 * sim.colloid.radius) + 1)
-    j = Int((sim.colloid.centers[2, idx] + sim.colloid.boxsize[2] / 2)
-            ÷ (2 * sim.colloid.radius) + 1)
-
+    i, j = _get_cell_list_pos(sim.colloid, idx)
     deleteat!(cell_list[i, j], findfirst(==(idx), cell_list[i, j]))
     move!(sim.colloid, idx, r * cos(θ), r * sin(θ))
     apply_periodic_boundary!(sim.colloid, idx)
 
-    i = Int((sim.colloid.centers[1, idx] + sim.colloid.boxsize[1] / 2)
-            ÷ (2 * sim.colloid.radius) + 1)
-    j = Int((sim.colloid.centers[2, idx] + sim.colloid.boxsize[2] / 2)
-            ÷ (2 * sim.colloid.radius) + 1)
-    
+    i, j = _get_cell_list_pos(sim.colloid, idx)
     push!(cell_list[i, j], idx)
-    if has_overlap(sim.colloid, cell_list, idx, i, j)
+
+    if violates_constraints(sim, idx) || has_overlap(sim.colloid, cell_list, idx, i, j)
         reject_move!(sim, idx)
+        pop!(cell_list[i, j])
+        i, j = _get_cell_list_pos(sim.colloid, idx)
+        push!(cell_list[i, j], idx)
         sim.rejected_translations += 1
     else
         accept_move!(sim, idx)
@@ -92,22 +102,32 @@ end
     end
 end
 
-@inline function apply_rotation!(sim::Simulation, cell_list::Matrix{Vector{Int}},
-                                 randnums::Matrix{<:Real}, idx::Int)
-    rotate!(sim.colloid, idx,
-            sim.rotation_span * (randnums[2, idx] - 0.5))
-    i = Int((sim.colloid.centers[1, idx] + sim.colloid.boxsize[1] / 2)
-            ÷ (2 * sim.colloid.radius) + 1)
-    j = Int((sim.colloid.centers[2, idx] + sim.colloid.boxsize[2] / 2)
-            ÷ (2 * sim.colloid.radius) + 1)
+function apply_rotation!(sim::Simulation, cell_list::Matrix{Vector{Int}},
+                         randnums::Matrix{<:Real}, idx::Int)
+    rotate!(sim.colloid, idx, sim.rotation_span * (randnums[2, idx] - 0.5))
+    i, j = _get_cell_list_pos(sim.colloid, idx)
     if has_overlap(sim.colloid, cell_list, idx, i, j)
         reject_move!(sim, idx)
-        sim.rejected_translations += 1
+        sim.rejected_rotations += 1
     else
         accept_move!(sim, idx)
-        sim.accepted_translations += 1
+        sim.accepted_rotations += 1
     end
 end
+
+@inline function violates_constraints(sim::Simulation, idx::Integer)
+    for constraint in sim.constraints
+        if is_violated(sim, constraint, idx)
+            return true
+        end
+    end
+    return false
+end
+
+@inline _get_cell_list_pos(colloid::Colloid, idx::Integer) = (
+    Int((colloid.centers[1, idx] + colloid.boxsize[1] / 2) ÷ (2 * colloid.radius) + 1),
+    Int((colloid.centers[2, idx] + colloid.boxsize[2] / 2) ÷ (2 * colloid.radius) + 1)
+)
 
 @inline function reject_move!(sim::Simulation, idx::Integer)
     sim.colloid.centers[1, idx] = sim.colloid._temp_centers[1, idx]
