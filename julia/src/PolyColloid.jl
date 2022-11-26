@@ -1,7 +1,7 @@
 module PolyColloid
 
 export Simulation, ForcefulCompressor, MoveSizeTuner, TrajectoryRecorder,
-    run!, build_configuration!, crystallize!, particle_count, particle_area
+    run!, build_configuration!, crystallize!, particle_count, particle_area, boxarea
 
 using RecipesBase
 using StaticArrays

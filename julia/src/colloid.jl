@@ -42,6 +42,8 @@ end
 @inline particle_area(colloid::Colloid) = (
     0.5 * colloid.sidenum * colloid.radius^2 * sin(2π / colloid.sidenum))
 
+@inline boxarea(colloid::Colloid) = colloid.boxsize[1] * colloid.boxsize[2]
+
 function _build_array(A::UnionAll, T::DataType, dims::Tuple{Vararg{<:Integer}}, content)
     if A <: StaticArray
         return A{Tuple{dims...}, T}(content)
