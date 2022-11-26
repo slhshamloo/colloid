@@ -37,7 +37,7 @@ struct Colloid{A<:AbstractArray, T<:Real}
     end
 end
 
-particle_count(colloid::Colloid) = size(colloid.centers, 2)
+@inline particle_count(colloid::Colloid) = size(colloid.centers, 2)
 
 function _build_array(A::UnionAll, T::DataType, dims::Tuple{Vararg{<:Integer}}, content)
     if A <: StaticArray
