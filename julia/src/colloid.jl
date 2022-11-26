@@ -39,6 +39,9 @@ end
 
 @inline particle_count(colloid::Colloid) = size(colloid.centers, 2)
 
+@inline particle_area(colloid::Colloid) = (
+    0.5 * colloid.sidenum * colloid.radius^2 * sin(2π / colloid.sidenum))
+
 function _build_array(A::UnionAll, T::DataType, dims::Tuple{Vararg{<:Integer}}, content)
     if A <: StaticArray
         return A{Tuple{dims...}, T}(content)
