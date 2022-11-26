@@ -1,6 +1,7 @@
 module PolyColloid
 
-export Simulation, run!, build_configuration!, crystallize!
+export Simulation, ForcefulCompressor, MoveSizeTuner, TrajectoryRecorder,
+    run!, build_configuration!, crystallize!
 
 using RecipesBase
 using StaticArrays
