@@ -21,29 +21,26 @@ mutable struct MoveSizeTuner <: AbstractUpdater
     max_move_radius::Real
     max_rotation_span::Real
 
+    maxscale::Real
     gamma::Real
     tollerance::Real
 
-    initialized::Bool
     translation_tuned::Bool
     rotation_tuned::Bool
 
-    prev_move_radius::Real
-    prev_rotation_span::Real
-    prev_translation_acceptance::Real
-    prev_rotation_acceptance::Real
+    prev_translation_tuned::Bool
+    prev_rotation_tuned::Bool
     prev_accepted_translations::Integer
     prev_rejected_translations::Integer
     prev_accepted_rotations::Integer
     prev_rejected_rotations::Integer
-    prev_translation_tuned::Bool
-    prev_rotation_tuned::Bool
 
     function MoveSizeTuner(cond::Function, target_acceptance_rate::Real;
                            max_move_radius::Real = Inf, max_rotation_span::Real = 2π,
-                           gamma::Real = 0.8, tollerance::Real = 0.01)
+                           maxscale::Real = 2.0, gamma::Real = 1.0,
+                           tollerance::Real = 0.01)
         new(target_acceptance_rate, cond, max_move_radius,
-            max_rotation_span, gamma, tollerance, false, false, false,
-            0.0, 0.0, 0.0, 0.0, 0, 0, 0, 0, false, false)
+            max_rotation_span, maxscale, gamma, tollerance,
+            false, false, false, false, 0, 0, 0, 0)
     end
 end

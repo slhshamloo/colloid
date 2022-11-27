@@ -9,24 +9,12 @@ function update!(sim::Simulation, tuner::MoveSizeTuner, cell_list::Matrix{Vector
         translation_acceptance, rotation_acceptance = _get_new_acceptance_rates(sim, tuner)
         _set_tuner_flags!(tuner, translation_acceptance, rotation_acceptance)
 
-        if tuner.initialized
-            new_move_radius = min(
-                tuner.max_move_radius, sim.move_radius - tuner.gamma
-                    * (translation_acceptance - tuner.target_acceptance_rate)
-                    * (sim.move_radius - tuner.prev_move_radius)
-                    / (translation_acceptance - tuner.prev_translation_acceptance)
-            )
-            new_rotation_span = min(
-                tuner.max_rotation_span, sim.rotation_span - tuner.gamma
-                    * (rotation_acceptance - tuner.target_acceptance_rate)
-                    * (sim.rotation_span - tuner.prev_rotation_span)
-                    / (rotation_acceptance - tuner.prev_rotation_acceptance)
-            )
-        else
-            new_move_radius = sim.move_radius * 0.9
-            new_rotation_span = sim.rotation_span * 0.9
-            tuner.initialized = true
-        end
+        new_move_radius = min(tuner.max_move_radius,
+            min(tuner.maxscale, (translation_acceptance + tuner.gamma)
+                / (tuner.target_acceptance_rate + tuner.gamma)) * sim.move_radius)
+        new_rotation_span = min(tuner.max_rotation_span,
+            min(tuner.maxscale, (rotation_acceptance + tuner.gamma)
+                / (tuner.target_acceptance_rate + tuner.gamma)) * sim.rotation_span)
 
         _set_tuner_prev_values!(sim, tuner, translation_acceptance, rotation_acceptance)
         sim.move_radius, sim.rotation_span = new_move_radius, new_rotation_span
@@ -42,7 +30,9 @@ function update!(sim::Simulation, compressor::ForcefulCompressor,
         sim.colloid.boxsize[1], sim.colloid.boxsize[2] = lxnew, lynew
         pos_scale = (lxnew / lxold, lynew / lyold)
         sim.colloid.centers .*= pos_scale
-        sim.colloid.vertices .*= pos_scale
+        sim.colloid.vertices .+= reshape(
+            sim.colloid.centers - sim.colloid._temp_centers,
+            2, 1, particle_count(sim.colloid))
         new_cell_list = get_cell_list(sim.colloid)
 
         if count_overlaps(sim.colloid, new_cell_list) > (
@@ -73,14 +63,14 @@ end
 
 @inline function _set_tuner_flags!(tuner::MoveSizeTuner,
                                    translation_acceptance::Real, rotation_acceptance::Real)
-    if abs(translation_acceptance - tuner.target_acceptance_rate) < tuner.tollerance
+    if abs(translation_acceptance - tuner.target_acceptance_rate) <= tuner.tollerance
         if tuner.prev_translation_tuned
             tuner.translation_tuned = true
         else
             tuner.prev_translation_tuned = true
         end
     end
-    if abs(rotation_acceptance - tuner.target_acceptance_rate) < tuner.tollerance
+    if abs(rotation_acceptance - tuner.target_acceptance_rate) <= tuner.tollerance
         if tuner.prev_rotation_tuned
             tuner.rotation_tuned = true
         else
@@ -91,14 +81,10 @@ end
 
 @inline function _set_tuner_prev_values!(sim::Simulation, tuner::MoveSizeTuner,
                                 translation_acceptance::Real, rotation_acceptance::Real)
-    tuner.prev_move_radius = sim.move_radius
-    tuner.prev_rotation_span = sim.rotation_span
     tuner.prev_accepted_translations = sim.accepted_translations
     tuner.prev_rejected_translations = sim.rejected_translations
     tuner.prev_accepted_rotations = sim.accepted_rotations
     tuner.prev_rejected_rotations = sim.rejected_rotations
-    tuner.prev_translation_acceptance = translation_acceptance
-    tuner.prev_rotation_acceptance = rotation_acceptance
 end
 
 @inline function _get_force_compress_dims(sim::Simulation, compressor::ForcefulCompressor)
