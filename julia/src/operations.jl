@@ -27,23 +27,19 @@ function update!(sim::Simulation, compressor::ForcefulCompressor,
     if !compressor.completed && compressor.cond(sim.timestep)
         lxnew, lynew = _get_force_compress_dims(sim, compressor)
         lxold, lyold = sim.colloid.boxsize
+
         sim.colloid.boxsize[1], sim.colloid.boxsize[2] = lxnew, lynew
         pos_scale = (lxnew / lxold, lynew / lyold)
         sim.colloid.centers .*= pos_scale
-        sim.colloid.vertices .+= reshape(
-            sim.colloid.centers - sim.colloid._temp_centers,
-            2, 1, particle_count(sim.colloid))
-        new_cell_list = get_cell_list(sim.colloid)
 
+        new_cell_list = get_cell_list(sim.colloid)
         if count_overlaps(sim.colloid, new_cell_list) > (
                 compressor.max_overlap_fraction * particle_count(sim.colloid))
             sim.colloid.boxsize[1], sim.colloid.boxsize[2] = lxold, lyold
             sim.colloid.centers .= sim.colloid._temp_centers
-            sim.colloid.vertices .= sim.colloid._temp_vertices
         else
             cell_list = new_cell_list
             sim.colloid._temp_centers .= sim.colloid.centers
-            sim.colloid._temp_vertices .= sim.colloid.vertices
             if (sim.colloid.boxsize[1] == compressor.target_boxsize[1]
                     && sim.colloid.boxsize[2] == compressor.target_boxsize[2])
                 compressor.completed = true

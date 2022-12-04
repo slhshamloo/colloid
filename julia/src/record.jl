@@ -16,11 +16,6 @@ struct TrajectoryRecorder <: AbstractRecorder
 end
 
 function get_snapshot(colloid::Colloid)
-    normals = Array(colloid.normals)
-    angles = Vector{eltype(centers)}(undef, particle_count(colloid))
-    for particle in eachindex(angles)
-        cosine = normals[1, 1, particle]
-        angles[particle] = abs(cosine) > 1 ? acos(round(cosine)) : acos(cosine)
-    end
-    return ColloidSnapshot(Matrix(colloid.centers), angles, Tuple(colloid.boxsize))
+    return ColloidSnapshot(Matrix(colloid.centers), Vector(colloid.angles),
+                           Tuple(colloid.boxsize))
 end

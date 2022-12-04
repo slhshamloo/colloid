@@ -91,14 +91,12 @@ function apply_translation!(sim::Simulation, cell_list::Matrix{Vector{Int}},
     push!(cell_list[i, j], idx)
 
     if violates_constraints(sim, idx) || has_overlap(sim.colloid, cell_list, idx, i, j)
-        reject_move!(sim, idx)
+        reject_translation!(sim, idx)
         pop!(cell_list[i, j])
         i, j = _get_cell_list_pos(sim.colloid, idx)
         push!(cell_list[i, j], idx)
-        sim.rejected_translations += 1
     else
-        accept_move!(sim, idx)
-        sim.accepted_translations += 1
+        accept_translation!(sim, idx)
     end
 end
 
@@ -107,11 +105,9 @@ function apply_rotation!(sim::Simulation, cell_list::Matrix{Vector{Int}},
     rotate!(sim.colloid, idx, sim.rotation_span * (randnums[2, idx] - 0.5))
     i, j = _get_cell_list_pos(sim.colloid, idx)
     if has_overlap(sim.colloid, cell_list, idx, i, j)
-        reject_move!(sim, idx)
-        sim.rejected_rotations += 1
+        reject_rotation!(sim, idx)
     else
-        accept_move!(sim, idx)
-        sim.accepted_rotations += 1
+        accept_rotation!(sim, idx)
     end
 end
 
@@ -129,16 +125,24 @@ end
     Int((colloid.centers[2, idx] + colloid.boxsize[2] / 2) ÷ (2 * colloid.radius) + 1)
 )
 
-@inline function reject_move!(sim::Simulation, idx::Integer)
-    sim.colloid.centers[1, idx] = sim.colloid._temp_centers[1, idx]
-    sim.colloid.centers[2, idx] = sim.colloid._temp_centers[2, idx]
-    sim.colloid.normals[:, :, idx] .= sim.colloid._temp_normals[:, :, idx]
-    sim.colloid.vertices[:, :, idx] .= sim.colloid._temp_vertices[:, :, idx]
-end
-
-@inline function accept_move!(sim::Simulation, idx::Integer)
+@inline function accept_translation!(sim::Simulation, idx::Integer)
     sim.colloid._temp_centers[1, idx] = sim.colloid.centers[1, idx]
     sim.colloid._temp_centers[2, idx] = sim.colloid.centers[2, idx]
-    sim.colloid._temp_normals[:, :, idx] .= sim.colloid.normals[:, :, idx]
-    sim.colloid._temp_vertices[:, :, idx] .= sim.colloid.vertices[:, :, idx]
+    sim.accepted_translations += 1
+end
+
+@inline function reject_translation!(sim::Simulation, idx::Integer)
+    sim.colloid.centers[1, idx] = sim.colloid._temp_centers[1, idx]
+    sim.colloid.centers[2, idx] = sim.colloid._temp_centers[2, idx]
+    sim.rejected_translations += 1
+end
+
+@inline function accept_rotation!(sim::Simulation, idx::Integer)
+    sim.colloid._temp_angles[idx] = sim.colloid.angles[idx]
+    sim.accepted_rotations += 1
+end
+
+@inline function reject_rotation!(sim::Simulation, idx::Integer)
+    sim.colloid.angles[idx] = sim.colloid._temp_angles[idx]
+    sim.rejected_rotations += 1
 end
