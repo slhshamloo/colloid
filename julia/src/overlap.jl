@@ -10,7 +10,7 @@ function is_overlapping(colloid::Colloid, i::Integer, j::Integer)
     elseif distnorm > 2 * colloid.radius
         return false
     end
-    centerangle = sign(dist[2]) * acos(dist[1] / distnorm)
+    centerangle = (dist[2] < 0 ? -1 : 1) * acos(dist[1] / distnorm)
 
     return (_is_vertex_overlapping(colloid, i, j, distnorm, centerangle)
             || _is_vertex_overlapping(colloid, j, i, distnorm, π + centerangle))
@@ -21,12 +21,17 @@ function _is_vertex_overlapping(colloid::Colloid, i::Integer, j::Integer,
     normalangle = _get_periodic_angle(centerangle - colloid.angles[i], colloid.sidenum)
     vertexangle = _get_periodic_angle(
         π - π / colloid.sidenum + centerangle - colloid.angles[j], colloid.sidenum)
-    center_projection = abs(distnorm * cos(normalangle))
-    radius_projection = colloid.radius * cos(normalangle - vertexangle)
-    return center_projection - radius_projection < colloid.bisector
+    diffangle = abs(normalangle - vertexangle)
+
+    return (
+        (abs(distnorm * cos(normalangle))
+            - colloid.radius * cos(diffangle) < colloid.bisector)
+        && (abs(distnorm * cos(2π / colloid.sidenum - abs(normalangle)))
+            - colloid.radius * cos(2π / colloid.sidenum - diffangle) < colloid.bisector)
+    )
 end
 
 @inline function _get_periodic_angle(angle::Real, sidenum::Integer)
     angle %= 2π / sidenum
-    return angle - sign(angle) * π / sidenum
+    return angle + (angle > 0 ? -1 : 1) * π / sidenum
 end
