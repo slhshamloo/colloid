@@ -24,9 +24,9 @@ mutable struct Simulation
                         boxsize::Tuple{<:Real, <:Real}; seed::Integer=-1, use_gpu=false,
                         numtype::DataType=Float32)
         if seed == -1
-            seed = rand(0:65535)
+            seed = rand(0:typemax(UInt))
         end
-        random_engine = MersenneTwister(seed)
+        random_engine = Xoshiro(seed)
         colloid = Colloid{Array, Float64}(particle_count, sidenum, radius, boxsize)
         new(colloid, seed, 0, zero(numtype), zero(numtype), 0, 0, 0, 0,
             AbstractConstraint[], AbstractRecorder[], AbstractUpdater[],
