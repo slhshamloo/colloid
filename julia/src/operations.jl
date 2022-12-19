@@ -24,7 +24,8 @@ end
 
 function update!(sim::Simulation, compressor::ForcefulCompressor,
                  cell_list::Matrix{Vector{Int}})
-    if !compressor.completed && compressor.cond(sim.timestep)
+    if (!compressor.completed && compressor.cond(sim.timestep)
+            && !has_overlap(sim.colloid, cell_list))
         lxnew, lynew = _get_force_compress_dims(sim, compressor)
         lxold, lyold = sim.colloid.boxsize
 

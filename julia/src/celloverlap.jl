@@ -19,11 +19,35 @@ function has_overlap(colloid::Colloid, cell_list::Matrix{Vector{Int}},
             return true
         end
     end
-    if check_orthogonal_overlap(colloid, cell_list, i, j, idx)
+    if has_orthogonal_overlap(colloid, cell_list, i, j, idx)
         return true
     end
-    if check_diagonal_overlap(colloid, cell_list, i, j, idx)
+    if has_diagonal_overlap(colloid, cell_list, i, j, idx)
         return true
+    end
+    return false
+end
+
+function has_overlap(colloid::Colloid, cell_list::Matrix{Vector{Int}})
+    for idx in CartesianIndices(cell_list)
+        i, j = Tuple(idx)
+        for m in eachindex(cell_list[idx])
+            for n in m+1:length(cell_list[idx])
+                if is_overlapping(colloid, cell_list[idx][m], cell_list[idx][n])
+                    return true
+                end
+            end
+            if (i + j) % 2 == 0
+                if has_orthogonal_overlap(colloid, cell_list, i, j, cell_list[idx][m])
+                    return true
+                end
+            end
+            if i % 2 == 0
+                if has_diagonal_overlap(colloid, cell_list, i, j, cell_list[idx][m])
+                    return true
+                end
+            end
+        end
     end
     return false
 end
@@ -51,7 +75,7 @@ function count_overlaps(colloid::Colloid, cell_list::Matrix{Vector{Int}})
     return overlap_count
 end
 
-@inline function check_orthogonal_overlap(
+@inline function has_orthogonal_overlap(
         colloid::Colloid, cell_list, i::Integer, j::Integer, m::Integer)
     lx, ly = size(cell_list)
     for n in cell_list[(i == 1 ? lx : i - 1), j]
@@ -69,7 +93,7 @@ end
     return false
 end
 
-@inline function check_diagonal_overlap(
+@inline function has_diagonal_overlap(
         colloid::Colloid, cell_list, i::Integer, j::Integer, m::Integer)
     lx, ly = size(cell_list)
     for n in cell_list[(i == 1 ? lx : i - 1), (j == 1 ? ly : j - 1)]
