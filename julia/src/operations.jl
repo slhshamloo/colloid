@@ -37,10 +37,9 @@ function update!(sim::Simulation, compressor::ForcefulCompressor,
         if count_overlaps(sim.colloid, new_cell_list) > (
                 compressor.max_overlap_fraction * particle_count(sim.colloid))
             sim.colloid.boxsize[1], sim.colloid.boxsize[2] = lxold, lyold
-            sim.colloid.centers .= sim.colloid._temp_centers
+            sim.colloid.centers ./= pos_scale
         else
             cell_list = new_cell_list
-            sim.colloid._temp_centers .= sim.colloid.centers
             if (sim.colloid.boxsize[1] == compressor.target_boxsize[1]
                     && sim.colloid.boxsize[2] == compressor.target_boxsize[2])
                 compressor.completed = true

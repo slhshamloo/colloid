@@ -27,7 +27,8 @@ mutable struct Simulation
             seed = rand(0:typemax(UInt))
         end
         random_engine = Xoshiro(seed)
-        colloid = Colloid{Array, Float64}(particle_count, sidenum, radius, boxsize)
+
+        colloid = Colloid{Array, numtype}(particle_count, sidenum, radius, boxsize)
         new(colloid, seed, 0, zero(numtype), zero(numtype), 0, 0, 0, 0,
             AbstractConstraint[], AbstractRecorder[], AbstractUpdater[],
             numtype, use_gpu, random_engine)
@@ -81,33 +82,39 @@ function apply_translation!(sim::Simulation, cell_list::Matrix{Vector{Int}},
                             randnums::Matrix{<:Real}, idx::Int)
     r = sim.move_radius * randnums[1, idx]
     θ = 2π * randnums[2, idx]
+    x, y = r * cos(θ), r * sin(θ)
 
-    i, j = _get_cell_list_pos(sim.colloid, idx)
+    i, j = _get_cell_list_pos(sim.colloid, cell_list, idx)
     deleteat!(cell_list[i, j], findfirst(==(idx), cell_list[i, j]))
-    move!(sim.colloid, idx, r * cos(θ), r * sin(θ))
+    sim.colloid.centers[1, idx] += x
+    sim.colloid.centers[2, idx] += y
     apply_periodic_boundary!(sim.colloid, idx)
 
-    i, j = _get_cell_list_pos(sim.colloid, idx)
+    i, j = _get_cell_list_pos(sim.colloid, cell_list, idx)
     push!(cell_list[i, j], idx)
 
     if violates_constraints(sim, idx) || has_overlap(sim.colloid, cell_list, idx, i, j)
-        reject_translation!(sim, idx)
+        sim.colloid.centers[1, idx] -= x
+        sim.colloid.centers[2, idx] -= y
         pop!(cell_list[i, j])
-        i, j = _get_cell_list_pos(sim.colloid, idx)
+        i, j = _get_cell_list_pos(sim.colloid, cell_list, idx)
         push!(cell_list[i, j], idx)
+        sim.rejected_translations += 1
     else
-        accept_translation!(sim, idx)
+        sim.accepted_translations += 1
     end
 end
 
 function apply_rotation!(sim::Simulation, cell_list::Matrix{Vector{Int}},
                          randnums::Matrix{<:Real}, idx::Int)
-    rotate!(sim.colloid, idx, sim.rotation_span * (randnums[2, idx] - 0.5))
-    i, j = _get_cell_list_pos(sim.colloid, idx)
+    angle_change = sim.rotation_span * (randnums[2, idx] - 0.5)
+    sim.colloid.angles[idx] += angle_change
+    i, j = _get_cell_list_pos(sim.colloid, cell_list, idx)
     if has_overlap(sim.colloid, cell_list, idx, i, j)
-        reject_rotation!(sim, idx)
+        sim.colloid.angles[idx] -= angle_change
+        sim.rejected_rotations += 1
     else
-        accept_rotation!(sim, idx)
+        sim.accepted_rotations += 1
     end
 end
 
@@ -120,10 +127,16 @@ end
     return false
 end
 
-@inline _get_cell_list_pos(colloid::Colloid, idx::Integer) = (
-    Int((colloid.centers[1, idx] + colloid.boxsize[1] / 2) ÷ (2 * colloid.radius) + 1),
-    Int((colloid.centers[2, idx] + colloid.boxsize[2] / 2) ÷ (2 * colloid.radius) + 1)
-)
+@inline function _get_cell_list_pos(colloid::Colloid,
+        cell_list::Matrix{Vector{Int}}, idx::Integer)
+    d = 2 * colloid.radius
+    cell_width = (d + (colloid.boxsize[1] % d) / (colloid.boxsize[1] ÷ d),
+                  d + (colloid.boxsize[2] % d) / (colloid.boxsize[2] ÷ d))
+    return (min(size(cell_list, 1), Int((colloid.centers[1, idx] + colloid.boxsize[1] / 2)
+                                        ÷ cell_width[1] + 1)),
+            min(size(cell_list, 2), Int((colloid.centers[2, idx] + colloid.boxsize[2] / 2)
+                                        ÷ cell_width[2] + 1)))
+end
 
 @inline function accept_translation!(sim::Simulation, idx::Integer)
     sim.colloid._temp_centers[1, idx] = sim.colloid.centers[1, idx]
