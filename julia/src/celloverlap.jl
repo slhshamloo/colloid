@@ -48,7 +48,7 @@ function count_overlaps(colloid::Colloid, cell_list::Matrix{Vector{Int}})
             end
         end
     end
-    return false
+    return overlap_count
 end
 
 @inline function check_orthogonal_overlap(
