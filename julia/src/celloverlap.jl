@@ -1,13 +1,16 @@
 function get_cell_list(colloid::Colloid)
-    cell_list = [Int[] for i in 1:Int.(colloid.boxsize[1] ÷ (2 * colloid.radius) + 1),
-                           j in 1:Int.(colloid.boxsize[2] ÷ (2 * colloid.radius) + 1)]
+    d = 2 * colloid.radius
+    cell_width = (d + (colloid.boxsize[1] % d) / (colloid.boxsize[1] ÷ d),
+                  d + (colloid.boxsize[2] % d) / (colloid.boxsize[2] ÷ d))
+    cell_list = [Int[] for i in 1:Int(colloid.boxsize[1] ÷ cell_width[1]),
+                           j in 1:Int(colloid.boxsize[2] ÷ cell_width[2])]
     for idx in 1:particle_count(colloid)
         push!(cell_list[
-                Int((colloid.centers[1, idx] + colloid.boxsize[1] / 2)
-                    ÷ (2 * colloid.radius) + 1),
-                Int((colloid.centers[2, idx] + colloid.boxsize[2] / 2)
-                    ÷ (2 * colloid.radius) + 1)
-            ], idx)
+            min(size(cell_list, 1), Int((colloid.centers[1, idx] + colloid.boxsize[1] / 2)
+                                        ÷ cell_width[1] + 1)),
+            min(size(cell_list, 2), Int((colloid.centers[2, idx] + colloid.boxsize[2] / 2)
+                                        ÷ cell_width[2] + 1))
+        ], idx)
     end
     return cell_list
 end
@@ -63,11 +66,11 @@ function count_overlaps(colloid::Colloid, cell_list::Matrix{Vector{Int}})
                 end
             end
             if (i + j) % 2 == 0
-                overlap_count += count_orthogonal_overlap(
+                overlap_count += count_orthogonal_overlaps(
                     colloid, cell_list, i, j, cell_list[idx][m])
             end
             if i % 2 == 0
-                overlap_count += count_diagonal_overlap(
+                overlap_count += count_diagonal_overlaps(
                     colloid, cell_list, i, j, cell_list[idx][m])
             end
         end
@@ -111,7 +114,7 @@ end
     return false
 end
 
-@inline function count_orthogonal_overlap(
+@inline function count_orthogonal_overlaps(
         colloid::Colloid, cell_list, i::Integer, j::Integer, m::Integer)
     count = 0
     lx, ly = size(cell_list)
@@ -130,7 +133,7 @@ end
     return count
 end
 
-@inline function count_diagonal_overlap(
+@inline function count_diagonal_overlaps(
         colloid::Colloid, cell_list, i::Integer, j::Integer, m::Integer)
     count = 0
     lx, ly = size(cell_list)
