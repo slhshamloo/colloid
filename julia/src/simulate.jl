@@ -86,16 +86,12 @@ function apply_translation!(sim::Simulation, cell_list::Matrix{Vector{Int}},
 
     i, j = _get_cell_list_pos(sim.colloid, cell_list, idx)
     deleteat!(cell_list[i, j], findfirst(==(idx), cell_list[i, j]))
-    sim.colloid.centers[1, idx] += x
-    sim.colloid.centers[2, idx] += y
-    apply_periodic_boundary!(sim.colloid, idx)
-
+    move!(sim.colloid, idx, x, y)
     i, j = _get_cell_list_pos(sim.colloid, cell_list, idx)
     push!(cell_list[i, j], idx)
 
     if violates_constraints(sim, idx) || has_overlap(sim.colloid, cell_list, idx, i, j)
-        sim.colloid.centers[1, idx] -= x
-        sim.colloid.centers[2, idx] -= y
+        move!(sim.colloid, idx, -x, -y)
         pop!(cell_list[i, j])
         i, j = _get_cell_list_pos(sim.colloid, cell_list, idx)
         push!(cell_list[i, j], idx)

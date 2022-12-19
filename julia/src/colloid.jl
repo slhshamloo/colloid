@@ -57,11 +57,10 @@ function crystallize!(colloid::Colloid)
     colloid.angles .= 0
 end
 
-@inline function apply_periodic_boundary!(colloid::Colloid)
-    colloid.centers .-= colloid.centers ÷ (colloid.boxsize / 2) * colloid.boxsize
-end
-
-@inline function apply_periodic_boundary!(colloid::Colloid, idx::Integer)
+@inline function move!(colloid::Colloid, idx::Integer, x::Real, y::Real)
+    colloid.centers[1, idx] += x
+    colloid.centers[2, idx] += y
+    # apply periodic boundary conditions
     colloid.centers[1, idx] -= (
         colloid.centers[1, idx] ÷ (colloid.boxsize[1] / 2) * colloid.boxsize[1])
     colloid.centers[2, idx] -= (
