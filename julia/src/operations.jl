@@ -4,7 +4,7 @@ function record!(sim::Simulation, recorder::TrajectoryRecorder)
     end
 end
 
-function update!(sim::Simulation, tuner::MoveSizeTuner, cell_list::Matrix{Vector{Int}})
+function update!(sim::Simulation, tuner::MoveSizeTuner, cell_list::CellList)
     if tuner.cond(sim.timestep)
         translation_acceptance, rotation_acceptance = _get_new_acceptance_rates(sim, tuner)
         _set_tuner_flags!(tuner, translation_acceptance, rotation_acceptance)
@@ -23,7 +23,7 @@ function update!(sim::Simulation, tuner::MoveSizeTuner, cell_list::Matrix{Vector
 end
 
 function update!(sim::Simulation, compressor::ForcefulCompressor,
-                 cell_list::Matrix{Vector{Int}})
+                 cell_list::CellList)
     if (!compressor.completed && compressor.cond(sim.timestep)
             && !has_overlap(sim.colloid, cell_list))
         lxnew, lynew = _get_force_compress_dims(sim, compressor)
@@ -33,7 +33,7 @@ function update!(sim::Simulation, compressor::ForcefulCompressor,
         pos_scale = (lxnew / lxold, lynew / lyold)
         sim.colloid.centers .*= pos_scale
 
-        new_cell_list = get_cell_list(sim.colloid)
+        new_cell_list = SequentialCellList(sim.colloid)
         if count_overlaps(sim.colloid, new_cell_list) > (
                 compressor.max_overlap_fraction * particle_count(sim.colloid))
             sim.colloid.boxsize[1], sim.colloid.boxsize[2] = lxold, lyold

@@ -10,7 +10,7 @@ using Statistics: mean
 
 include("colloid.jl")
 include("overlap.jl")
-include("celloverlap.jl")
+include("cellseq.jl")
 include("constraint.jl")
 include("record.jl")
 include("update.jl")
