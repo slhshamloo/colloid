@@ -4,7 +4,7 @@ struct SequentialCellList
     cells::Matrix{Vector{Int}}
     width::Tuple{<:Real, <:Real}
 
-    function CellList(colloid::Colloid; shift=(0.0, 0.0))
+    function CellList(colloid::Colloid)
         d = 2 * colloid.radius
         width = (d + (colloid.boxsize[1] % d) / (colloid.boxsize[1] ÷ d),
                  d + (colloid.boxsize[2] % d) / (colloid.boxsize[2] ÷ d))
@@ -16,7 +16,7 @@ struct SequentialCellList
             push!(cells[i, j], idx)
         end
 
-        new(cells, width, shift)
+        new(cells, width)
     end
 end
 
@@ -33,13 +33,6 @@ end
 @inline function get_cell_list_indices(colloid::Colloid, cell_list::SequentialCellList,
                                        idx::Integer)
     get_cell_list_indices(colloid, cell_list.cells, cell_list.width, idx)
-end
-
-function get_cell_list(colloid::Colloid)
-    d = 2 * colloid.radius
-    cell_width = (d + (colloid.boxsize[1] % d) / (colloid.boxsize[1] ÷ d),
-                  d + (colloid.boxsize[2] % d) / (colloid.boxsize[2] ÷ d))
-    return cell_list
 end
 
 function has_overlap(colloid::Colloid, cell_list::SequentialCellList,
