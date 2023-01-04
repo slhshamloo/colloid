@@ -39,7 +39,7 @@ function run!(sim::Simulation, timesteps::Integer)
     (sim.accepted_translations, sim.rejected_translations,
         sim.accepted_rotations, sim.rejected_rotations) = (0, 0, 0, 0)
     if !sim.uses_gpu
-        cell_list = SequentialCellList(sim.colloid)
+        cell_list = SeqCellList(sim.colloid)
     end
 
     for _ in 1:timesteps

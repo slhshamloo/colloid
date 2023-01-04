@@ -1,6 +1,6 @@
 abstract type CellList end
 
-struct SequentialCellList
+struct SeqCellList <: CellList
     cells::Matrix{Vector{Int}}
     width::Tuple{<:Real, <:Real}
 
@@ -30,12 +30,12 @@ end
     return i, j
 end
 
-@inline function get_cell_list_indices(colloid::Colloid, cell_list::SequentialCellList,
+@inline function get_cell_list_indices(colloid::Colloid, cell_list::SeqCellList,
                                        idx::Integer)
     get_cell_list_indices(colloid, cell_list.cells, cell_list.width, idx)
 end
 
-function has_overlap(colloid::Colloid, cell_list::SequentialCellList,
+function has_overlap(colloid::Colloid, cell_list::SeqCellList,
                      idx::Integer, i::Integer, j::Integer)   
     for n in cell_list.cells[i, j]
         if n != idx && is_overlapping(colloid, n, idx)
@@ -51,7 +51,7 @@ function has_overlap(colloid::Colloid, cell_list::SequentialCellList,
     return false
 end
 
-function has_overlap(colloid::Colloid, cell_list::SequentialCellList)
+function has_overlap(colloid::Colloid, cell_list::SeqCellList)
     for idx in CartesianIndices(cell_list.cells)
         i, j = Tuple(idx)
         for m in eachindex(cell_list.cells[idx])
@@ -78,7 +78,7 @@ function has_overlap(colloid::Colloid, cell_list::SequentialCellList)
     return false
 end
 
-function count_overlaps(colloid::Colloid, cell_list::SequentialCellList)
+function count_overlaps(colloid::Colloid, cell_list::SeqCellList)
     overlap_count = 0
     for idx in CartesianIndices(cell_list.cells)
         i, j = Tuple(idx)
@@ -102,7 +102,7 @@ function count_overlaps(colloid::Colloid, cell_list::SequentialCellList)
     return overlap_count
 end
 
-@inline function has_orthogonal_overlap(colloid::Colloid, cell_list::SequentialCellList,
+@inline function has_orthogonal_overlap(colloid::Colloid, cell_list::SeqCellList,
                                         i::Integer, j::Integer, m::Integer)
     lx, ly = size(cell_list.cells)
     for n in cell_list.cells[(i == 1 ? lx : i - 1), j]
@@ -120,7 +120,7 @@ end
     return false
 end
 
-@inline function has_diagonal_overlap(colloid::Colloid, cell_list::SequentialCellList,
+@inline function has_diagonal_overlap(colloid::Colloid, cell_list::SeqCellList,
                                       i::Integer, j::Integer, m::Integer)
     lx, ly = size(cell_list.cells)
     for n in cell_list.cells[(i == 1 ? lx : i - 1), (j == 1 ? ly : j - 1)]
@@ -138,7 +138,7 @@ end
     return false
 end
 
-@inline function count_orthogonal_overlaps(colloid::Colloid, cell_list::SequentialCellList,
+@inline function count_orthogonal_overlaps(colloid::Colloid, cell_list::SeqCellList,
                                            i::Integer, j::Integer, m::Integer)
     count = 0
     lx, ly = size(cell_list.cells)
@@ -157,7 +157,7 @@ end
     return count
 end
 
-@inline function count_diagonal_overlaps(colloid::Colloid, cell_list::SequentialCellList,
+@inline function count_diagonal_overlaps(colloid::Colloid, cell_list::SeqCellList,
                                          i::Integer, j::Integer, m::Integer)
     count = 0
     lx, ly = size(cell_list.cells)
