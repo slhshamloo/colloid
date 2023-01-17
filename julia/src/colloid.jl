@@ -1,23 +1,32 @@
-struct Colloid{A<:AbstractArray, T<:Real}
-    sidenum::Integer
+struct Colloid{T<:Real, V<:AbstractVector, M<:AbstractMatrix, VB<:AbstractVector}
+    sidenum::Int
     radius::T
     bisector::T
-    boxsize::MVector
+    boxsize::VB
 
-    centers::A
-    angles::A
-
-    function Colloid{A, T}(particle_count::Integer, sidenum::Integer, radius::Real,
-                           boxsize::Tuple{<:Real, <:Real}) where {A<:AbstractArray, T<:Real}
-        boxsize = MVector{2, T}(boxsize)
-        bisector = radius * cos(π / sidenum)
-
-        angles = A{T, 1}(undef, particle_count)
-        centers = A{T, 2}(undef, 2, particle_count)
-
-        new{A, T}(sidenum, radius, bisector, boxsize, centers, angles)
-    end
+    centers::M
+    angles::V
 end
+
+function Colloid{T}(particle_count::Integer, sidenum::Integer, radius::Real,
+        boxsize::Tuple{<:Real, <:Real}; gpu=false) where {T<:Real}
+    bisector = radius * cos(π / sidenum)
+
+    if gpu
+        angles = CuVector{T}(undef, particle_count)
+        centers = CuMatrix{T}(undef, 2, particle_count)
+        boxsize = CuVector{T}([boxsize[1], boxsize[2]])
+    else
+        angles = Vector{T}(undef, particle_count)
+        centers = Matrix{T}(undef, 2, particle_count)
+        boxsize = MVector{2, T}(boxsize)
+    end
+
+    Colloid{T, typeof(angles), typeof(centers), typeof(boxsize)}(
+        sidenum, radius, bisector, boxsize, centers, angles)
+end
+
+Adapt.@adapt_structure Colloid
 
 @inline particle_count(colloid::Colloid) = size(colloid.centers, 2)
 
@@ -52,8 +61,12 @@ function crystallize!(colloid::Colloid)
     xs = shortdim == 1 ? shortpos : longpos
     ys = shortdim == 2 ? shortpos : longpos
     centers = permutedims(hcat(xs, ys))
+    centers = centers[:, 1:particle_count(colloid)]
 
-    colloid.centers .= centers[:, 1:particle_count(colloid)]
+    if isa(colloid.centers, CuArray)
+        centers = CuArray(centers)
+    end
+    colloid.centers .= centers
     colloid.angles .= 0
 end
 

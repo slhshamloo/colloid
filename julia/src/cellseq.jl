@@ -12,7 +12,7 @@ struct SeqCellList <: CellList
         cells = [Int[] for i in 1:Int(colloid.boxsize[1] ÷ width[1]),
                            j in 1:Int(colloid.boxsize[2] ÷ width[2])]
         for idx in 1:particle_count(colloid)
-            i, j = get_cell_list_indices(colloid, cells, width, idx)
+            i, j = get_cell_list_indices(colloid, size(cells), width, idx)
             push!(cells[i, j], idx)
         end
 
@@ -20,19 +20,19 @@ struct SeqCellList <: CellList
     end
 end
 
-@inline function get_cell_list_indices(colloid::Colloid, cells::Matrix{Vector{Int}},
-                                       width::Tuple{<:Real, <:Real}, idx::Integer)
-    i = min(size(cells, 1), Int((colloid.centers[1, idx] + colloid.boxsize[1] / 2)
-                                ÷ width[1] + 1))
-    j = min(size(cells, 2), Int((colloid.centers[2, idx] + colloid.boxsize[2] / 2)
-                                ÷ width[2] + 1))
+@inline function get_cell_list_indices(colloid::Colloid,
+        gridsize::Tuple{<:Integer, <:Integer}, width::Tuple{<:Real, <:Real}, idx::Integer)
+    i = min(gridsize[1], Int((colloid.centers[1, idx] + colloid.boxsize[1] / 2)
+                             ÷ width[1] + 1))
+    j = min(gridsize[2], Int((colloid.centers[2, idx] + colloid.boxsize[2] / 2)
+                             ÷ width[2] + 1))
 
     return i, j
 end
 
 @inline function get_cell_list_indices(colloid::Colloid, cell_list::SeqCellList,
                                        idx::Integer)
-    get_cell_list_indices(colloid, cell_list.cells, cell_list.width, idx)
+    get_cell_list_indices(colloid, size(cell_list.cells), cell_list.width, idx)
 end
 
 function has_overlap(colloid::Colloid, cell_list::SeqCellList,
