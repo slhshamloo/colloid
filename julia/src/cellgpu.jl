@@ -5,7 +5,6 @@ struct CuCellList{T<:Real, A<:AbstractArray, M<:AbstractMatrix,
 
     cells::A
     counts::M
-    checkerboard::NTuple{4, M}
 
     _temp_cells::A
     _temp_counts::M
@@ -26,22 +25,11 @@ function CuCellList(colloid::Colloid, shift::AbstractArray = [0.0f0, 0.0f0])
         cells[counts[i, j], i, j] = idx
     end
 
-    checkerboard = (
-        CuMatrix{Int32}(permutedims(hcat(repeat(1:2:m, inner=ceil(Int, n/2)),
-                                         repeat(1:2:n, ceil(Int, m/2))))),
-        CuMatrix{Int32}(permutedims(hcat(repeat(2:2:m, inner=ceil(Int, n/2)),
-                                         repeat(1:2:n, m ÷ 2)))),
-        CuMatrix{Int32}(permutedims(hcat(repeat(1:2:m, inner=n÷2),
-                                         repeat(2:2:n, ceil(Int, m/2))))),
-        CuMatrix{Int32}(permutedims(hcat(repeat(2:2:m, inner=m÷2),
-                                         repeat(2:2:n, n ÷ 2))))
-    )
-
     shift = CuVector{eltype(colloid.centers)}(shift)
     cells = CuArray(cells)
     counts = CuArray(counts)
     CuCellList{eltype(width), typeof(cells), typeof(counts), typeof(shift)}(
-        width, shift, cells, counts, checkerboard, similar(cells), zero(counts))
+        width, shift, cells, counts, similar(cells), zero(counts))
 end
 
 Adapt.@adapt_structure CuCellList
@@ -96,23 +84,6 @@ end
             cell_list._temp_cells[cell_list._temp_counts[i, j], i, j] = idx
         end
     end
-end
-
-function has_overlap(colloid::Colloid, cell_list::CuCellList,
-                     idx::Integer, i::Integer, j::Integer)   
-    for k in 1:cell_list.counts[i, j]
-        other = cell_list.cells[k, i, j]
-        if other != idx && is_overlapping(colloid, other, idx)
-            return true
-        end
-    end
-    if has_orthogonal_overlap(colloid, cell_list, i, j, idx)
-        return true
-    end
-    if has_diagonal_overlap(colloid, cell_list, i, j, idx)
-        return true
-    end
-    return false
 end
 
 function has_overlap(colloid::Colloid, cell_list::CuCellList)
