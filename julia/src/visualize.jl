@@ -7,6 +7,7 @@
 
             fillcolor --> :mediumblue
             linecolor --> :red
+            linewidth --> 80 * colloid.bisector / maximum(colloid.boxsize)
             ratio --> :equal
             legend --> false
 
