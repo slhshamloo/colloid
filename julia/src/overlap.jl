@@ -1,6 +1,6 @@
 function is_overlapping(colloid::Colloid, i::Integer, j::Integer)
     dist = (colloid.centers[1, i] - colloid.centers[1, j],
-        colloid.centers[2, i] - colloid.centers[2, j])
+            colloid.centers[2, i] - colloid.centers[2, j])
     dist = (dist[1] - dist[1] ÷ (colloid.boxsize[1]/2) * colloid.boxsize[1],
             dist[2] - dist[2] ÷ (colloid.boxsize[2]/2) * colloid.boxsize[2])
 
