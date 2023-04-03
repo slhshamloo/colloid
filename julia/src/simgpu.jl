@@ -9,14 +9,14 @@ function apply_step!(sim::Simulation, cell_list::CuCellList)
     for sweep in 1:sweeps
         maxcount = maximum(cell_list.counts)
         groupcount = 9 * maxcount
+        groups_per_block = nthreads ÷ groupcount
         for color in shuffle(1:4)
             cellcount = getcellcount(cell_list, color)
-            groups_per_block = nthreads ÷ groupcount
             numblocks = cellcount ÷ groups_per_block + 1
-            @cuda(threads=nthreads, blocks=numblocks, shmem=2*groups_per_block*sizeof(Int),
-                apply_parallel_step!(sim.colloid, cell_list, color, sweep, maxcount,
-                groupcount, cellcount, sim.move_radius, sim.rotation_span, randnums,
-                randchoices, accept))
+            @cuda(threads=nthreads, blocks=numblocks,
+                  shmem = 2 * groups_per_block * sizeof(Int32), apply_parallel_step!(
+                  sim.colloid, cell_list, color, sweep, maxcount, groupcount, cellcount,
+                  sim.move_radius, sim.rotation_span, randnums, randchoices, accept))
         end
         direction = ((1, 0), (-1, 0), (0, 1), (0, -1))[rand(1:4)]
         shift = (direction[2] == 0 ? cell_list.width[1] : cell_list.width[2]) * (
@@ -49,7 +49,7 @@ function apply_parallel_step!(colloid::Colloid, cell_list::CuCellList,
         randnums::CuDeviceArray, randchoices::CuDeviceArray, accept::CuDeviceArray)
     is_thread_active = true
     groups_per_block = blockDim().x ÷ groupcount
-    shared_memory = CuDynamicSharedArray(Int, 2 * groups_per_block)
+    shared_memory = CuDynamicSharedArray(Int32, 2 * groups_per_block)
     reject_count = @view shared_memory[1:groups_per_block]
     idx = @view shared_memory[groups_per_block+1:end]
 
@@ -124,8 +124,8 @@ function checkoverlap(colloid::Colloid, cell_list::CuCellList,
         relpos, k = divrem(thread, maxcount)
         k += 1
         jdelta, idelta = divrem(relpos, 3)
-        ineighbor = (i + idelta + size(cell_list.cells, 2) - 2) % size(cell_list.cells, 2) + 1
-        jneighbor = (j + jdelta + size(cell_list.cells, 3) - 2) % size(cell_list.cells, 3) + 1
+        ineighbor = mod(i + idelta - 2, size(cell_list.cells, 2)) + 1
+        jneighbor = mod(j + jdelta - 2, size(cell_list.cells, 3)) + 1
 
         if k <= cell_list.counts[ineighbor, jneighbor]
             neighbor = cell_list.cells[k, ineighbor, jneighbor]

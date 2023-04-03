@@ -33,7 +33,8 @@ function update!(sim::Simulation, compressor::ForcefulCompressor,
         pos_scale = (lxnew / lxold, lynew / lyold)
         sim.colloid.centers .*= pos_scale
 
-        new_cell_list = SeqCellList(sim.colloid)
+        new_cell_list = (sim.gpu ? CuCellList(sim.colloid, cell_list.shift)
+                                 : SeqCellList(sim.colloid))
         if count_overlaps(sim.colloid, new_cell_list) > (
                 compressor.max_overlap_fraction * particle_count(sim.colloid))
             sim.colloid.boxsize[1], sim.colloid.boxsize[2] = lxold, lyold
@@ -76,7 +77,7 @@ end
 end
 
 @inline function _set_tuner_prev_values!(sim::Simulation, tuner::MoveSizeTuner,
-                                translation_acceptance::Real, rotation_acceptance::Real)
+        translation_acceptance::Real, rotation_acceptance::Real)
     tuner.prev_accepted_translations = sim.accepted_translations
     tuner.prev_rejected_translations = sim.rejected_translations
     tuner.prev_accepted_rotations = sim.accepted_rotations
