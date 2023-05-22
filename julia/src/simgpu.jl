@@ -130,15 +130,11 @@ function checkoverlap(colloid::Colloid, cell_list::CuCellList,
         if k <= cell_list.counts[ineighbor, jneighbor]
             neighbor = cell_list.cells[k, ineighbor, jneighbor]
             if idx[group] != neighbor
-                dist = (colloid.centers[1, idx[group]] - colloid.centers[1, neighbor],
-                        colloid.centers[2, idx[group]] - colloid.centers[2, neighbor])
-                dist = (dist[1] - dist[1] ÷ (colloid.boxsize[1] / 2) * colloid.boxsize[1],
-                        dist[2] - dist[2] ÷ (colloid.boxsize[2] / 2) * colloid.boxsize[2])
-
-                distnorm = √(dist[1]^2 + dist[2]^2)
-                if distnorm <= 2 * colloid.bisector
+                definite_overlap, out_of_range, dist, distnorm = _overlap_range(
+                    colloid, idx[group], neighbor)
+                if definite_overlap
                     CUDA.@atomic reject_count[group] += 1
-                elseif distnorm < 2 * colloid.radius
+                elseif !out_of_range
                     passed_circumference_check = true
                     centerangle = (dist[2] < 0 ? -1 : 1) * acos(dist[1] / distnorm)
                 end
@@ -147,11 +143,12 @@ function checkoverlap(colloid::Colloid, cell_list::CuCellList,
     end
     CUDA.sync_threads()
 
-    if (passed_circumference_check && reject_count[group] == 0
-            && (_is_vertex_overlapping(colloid, idx[group], neighbor,
+    if (passed_circumference_check && reject_count[group] == 0)
+        if (_is_vertex_overlapping(colloid, idx[group], neighbor,
                                        distnorm, centerangle)
                 || _is_vertex_overlapping(colloid, neighbor, idx[group],
-                                          distnorm, π + centerangle)))
-        CUDA.@atomic reject_count[group] += 1
+                                          distnorm, π + centerangle))
+            CUDA.@atomic reject_count[group] += 1
+        end
     end
 end
