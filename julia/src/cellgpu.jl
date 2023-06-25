@@ -10,12 +10,15 @@ struct CuCellList{T<:Real, A<:AbstractArray, M<:AbstractMatrix,
     _temp_counts::M
 end
 
-function CuCellList(colloid::Colloid, shift::AbstractArray = [0.0f0, 0.0f0])
-    w = colloid.sidenum <= 4 ? 2 * colloid.radius : 2 * √2 * colloid.radius
-    width = (colloid.boxsize[1] / ceil(colloid.boxsize[1] / w),
-             colloid.boxsize[2] / ceil(colloid.boxsize[2] / w))
+function CuCellList(colloid::Colloid, shift::AbstractArray = [0.0f0, 0.0f0];
+                    maxwidth::Real = 0.0f0, max_particle_per_cell=5)
+    if iszero(maxwidth)
+        maxwidth = colloid.sidenum <= 4 ? 2 * colloid.radius : 2 * √2 * colloid.radius
+    end
+    width = (colloid.boxsize[1] / ceil(colloid.boxsize[1] / maxwidth),
+             colloid.boxsize[2] / ceil(colloid.boxsize[2] / maxwidth))
     m, n = Int(colloid.boxsize[1] ÷ width[1]), Int(colloid.boxsize[2] ÷ width[2])
-    cells = Array{Int32, 3}(undef, 10, m, n)
+    cells = Array{Int32, 3}(undef, max_particle_per_cell, m, n)
     counts = zeros(Int32, m, n)
 
     for idx in 1:particle_count(colloid)
