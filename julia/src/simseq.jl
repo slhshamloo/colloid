@@ -53,7 +53,7 @@ end
 
 @inline function violates_constraints(sim::Simulation, idx::Integer)
     for constraint in sim.constraints
-        if is_violated(sim, constraint, idx)
+        if is_violated(sim.colloid, constraint, idx)
             return true
         end
     end
