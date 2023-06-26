@@ -16,7 +16,7 @@ function update!(sim::Simulation, tuner::MoveSizeTuner, cell_list::CellList)
             min(tuner.maxscale, (rotation_acceptance + tuner.gamma)
                 / (tuner.target_acceptance_rate + tuner.gamma)) * sim.rotation_span)
 
-        _set_tuner_prev_values!(sim, tuner, translation_acceptance, rotation_acceptance)
+        _set_tuner_prev_values!(sim, tuner)
         sim.move_radius, sim.rotation_span = new_move_radius, new_rotation_span
     end
     return cell_list
@@ -24,30 +24,50 @@ end
 
 function update!(sim::Simulation, compressor::ForcefulCompressor,
                  cell_list::CellList)
-    if (!compressor.completed && compressor.cond(sim.timestep)
-            && !has_overlap(sim.colloid, cell_list))
-        lxnew, lynew = _get_force_compress_dims(sim, compressor)
-        lxold, lyold = sim.colloid.boxsize
-
-        sim.colloid.boxsize[1], sim.colloid.boxsize[2] = lxnew, lynew
-        pos_scale = (lxnew / lxold, lynew / lyold)
-        sim.colloid.centers .*= pos_scale
-
-        new_cell_list = (sim.gpu ? CuCellList(sim.colloid, cell_list.shift)
-                                 : SeqCellList(sim.colloid))
-        if count_overlaps(sim.colloid, new_cell_list) > (
-                compressor.max_overlap_fraction * particle_count(sim.colloid))
-            sim.colloid.boxsize[1], sim.colloid.boxsize[2] = lxold, lyold
-            sim.colloid.centers ./= pos_scale
-        else
-            cell_list = new_cell_list
-            if (sim.colloid.boxsize[1] == compressor.target_boxsize[1]
-                    && sim.colloid.boxsize[2] == compressor.target_boxsize[2])
+    if needs_compression(sim, compressor, cell_list)
+        if compressor.reached_target
+            if sim.gpu
+                if iszero(count_overlaps(sim.colloid, cell_list)
+                          + count_violations_gpu(sim.colloid, sim.constraints))
+                    cell_list = CuCellList(sim.colloid, cell_list.shift)
+                    compressor.completed = true
+                end
+            else
                 compressor.completed = true
+            end
+        else
+            pos_scale, lxold, lyold = _apply_compression!(sim, compressor)
+            if sim.gpu
+                new_cell_list = CuCellList(sim.colloid, cell_list.shift;
+                    maxwidth = 0.8 * (sim.colloid.sidenum <= 4 ?
+                        2 * sim.colloid.radius : 2 * √2 * sim.colloid.radius))
+                violations = count_violations_gpu(sim.colloid, sim.constraints)
+            else
+                new_cell_list = SeqCellList(sim.colloid)
+                violations = count_violations(sim.colloid, sim.constraints)
+            end
+            if violations + count_overlaps(sim.colloid, new_cell_list) > (
+                    compressor.max_overlap_fraction * particle_count(sim.colloid))
+                sim.colloid.boxsize[1], sim.colloid.boxsize[2] = lxold, lyold
+                sim.colloid.centers ./= pos_scale
+            else
+                cell_list = new_cell_list
+                if (sim.colloid.boxsize[1] == compressor.target_boxsize[1]
+                        && sim.colloid.boxsize[2] == compressor.target_boxsize[2])
+                    compressor.reached_target = true
+                end
             end
         end
     end
     return cell_list
+end
+
+@inline function needs_compression(sim::Simulation, compressor::ForcefulCompressor,
+                                   cell_list::CellList)
+    return (!compressor.completed && compressor.cond(sim.timestep)
+        && !has_overlap(sim.colloid, cell_list)
+        && ((!sim.gpu && !has_violation(sim.colloid, sim.constraints))
+            || (sim.gpu && count_violations_gpu(sim.colloid, sim.constraints) == 0)))
 end
 
 @inline function _get_new_acceptance_rates(sim::Simulation, tuner::MoveSizeTuner)
@@ -76,17 +96,26 @@ end
     end
 end
 
-@inline function _set_tuner_prev_values!(sim::Simulation, tuner::MoveSizeTuner,
-        translation_acceptance::Real, rotation_acceptance::Real)
+@inline function _set_tuner_prev_values!(sim::Simulation, tuner::MoveSizeTuner)
     tuner.prev_accepted_translations = sim.accepted_translations
     tuner.prev_rejected_translations = sim.rejected_translations
     tuner.prev_accepted_rotations = sim.accepted_rotations
     tuner.prev_rejected_rotations = sim.rejected_rotations
 end
 
+@inline function _apply_compression!(sim::Simulation, compressor::ForcefulCompressor)
+    lxnew, lynew = _get_force_compress_dims(sim, compressor)
+    lxold, lyold = sim.colloid.boxsize
+    
+    sim.colloid.boxsize[1], sim.colloid.boxsize[2] = lxnew, lynew
+    pos_scale = (lxnew / lxold, lynew / lyold)
+    sim.colloid.centers .*= pos_scale
+    return pos_scale, lxold, lyold
+end
+
 @inline function _get_force_compress_dims(sim::Simulation, compressor::ForcefulCompressor)
     scale_factor = max(compressor.minscale,
-            1.0 - sim.move_radius / (2 * sim.colloid.radius))
+        1.0 - sim.move_radius / (2 * sim.colloid.radius))
 
     if sim.colloid.boxsize[1] < compressor.target_boxsize[1]
         lxnew = min(sim.colloid.boxsize[1] / scale_factor, compressor.target_boxsize[1])

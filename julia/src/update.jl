@@ -6,11 +6,12 @@ mutable struct ForcefulCompressor <: AbstractUpdater
 
     minscale::Real
     max_overlap_fraction::Real
+    reached_target::Bool
     completed::Bool
 
     function ForcefulCompressor(cond::Function, target_boxsize::Tuple{<:Real, <:Real};
                                 minscale::Real = 0.99, max_overlap_fraction::Real=0.25)
-        new(target_boxsize, cond, minscale, max_overlap_fraction, false)
+        new(target_boxsize, cond, minscale, max_overlap_fraction, false, false)
     end
 end
 

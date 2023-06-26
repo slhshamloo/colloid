@@ -11,7 +11,7 @@ struct CuCellList{T<:Real, A<:AbstractArray, M<:AbstractMatrix,
 end
 
 function CuCellList(colloid::Colloid, shift::AbstractArray = [0.0f0, 0.0f0];
-                    maxwidth::Real = 0.0f0, max_particle_per_cell=5)
+                    maxwidth::Real = 0.0f0, max_particle_per_cell=20)
     if iszero(maxwidth)
         maxwidth = colloid.sidenum <= 4 ? 2 * colloid.radius : 2 * √2 * colloid.radius
     end
@@ -67,7 +67,6 @@ function shift_cell!(colloid::Colloid, cell_list::CuCellList,
                      direction::Tuple{<:Integer, <:Integer})
     i = (blockIdx().x - 1) * blockDim().x + threadIdx().x
     j = (blockIdx().y - 1) * blockDim().y + threadIdx().y
-    lx, ly = size(cell_list.counts)
     if i > size(cell_list.cells, 2) || j > size(cell_list.cells, 3)
         return
     end
@@ -91,13 +90,14 @@ end
 end
 
 function count_overlaps(colloid::Colloid, cell_list::CuCellList)
-    nthreads = (numthreads[1] * numthreads[2])
+    blockthreads = (numthreads[1] * numthreads[2])
     maxcount = maximum(cell_list.counts)
     groupcount = 9 * maxcount
-    groups_per_block = nthreads ÷ groupcount
+    groups_per_block = blockthreads ÷ groupcount
     numblocks = length(cell_list.counts) ÷ groups_per_block + 1
     overlapcounts = zero(cell_list.counts)
-    @cuda(threads=nthreads, blocks=numblocks, shmem = groups_per_block * sizeof(Int32),
+    @cuda(threads=blockthreads, blocks=numblocks,
+          shmem = groups_per_block * sizeof(Int32),
           count_overlaps_parallel(colloid, cell_list, overlapcounts, maxcount,
                                   groupcount, groups_per_block))
     return sum(overlapcounts) ÷ 2

@@ -37,7 +37,7 @@ function fullcheck(colloid::Colloid, index::Integer,
         constraints::RawConstraints, cidx::Integer)
     if constraints.typeids[cidx] == 0
         return is_overlapping_with_disk(colloid, index, (constraints.data[1, cidx],
-            constraints.data[2, cidx]), constraints.data[3, idx])
+            constraints.data[2, cidx]), constraints.data[3, cidx])
     else
         return false
     end
@@ -85,19 +85,20 @@ end
 function count_violations_gpu(colloid::Colloid,
         constraints::AbstractVector{<:AbstractConstraint})
     blockthreads = (numthreads[1] * numthreads[2])
-    numblocks = particle_count(colloid) ÷ nthreads + 1
+    numblocks = particle_count(colloid) ÷ blockthreads + 1
     raw_constraints = build_raw_constraints(constraints, eltype(colloid.centers))
-    violation_counts = CuArray{Int32}(undef, numblocks)
+    violation_counts = CuArray(zeros(Int32, numblocks))
     @cuda(threads=blockthreads, blocks=numblocks, shmem = blockthreads * sizeof(Int32),
           count_violations_parallel(colloid, raw_constraints, violation_counts))
     return sum(violation_counts)
 end
 
 function count_violations_parallel(colloid::Colloid, constraints::RawConstraints,
-                                   violation_count::CuDeviceArray)
+                                   violation_counts::CuDeviceArray)
     thread = threadIdx().x
     tid = thread + (blockIdx().x - 1) * blockDim().x
     blockviolations = CuDynamicSharedArray(Int32, blockDim().x)
+    blockviolations[thread] = 0
 
     if tid <= particle_count(colloid)
         for cidx in 1:length(constraints.typeids)
@@ -116,7 +117,8 @@ function count_violations_parallel(colloid::Colloid, constraints::RawConstraints
         CUDA.sync_threads()
         i ÷= 2
     end
-    if thread == 0
-        violation_count[blockIdx().x] = blockviolations 
+    if thread == 1
+        violation_counts[blockIdx().x] = blockviolations[1]
     end
+    return nothing
 end
