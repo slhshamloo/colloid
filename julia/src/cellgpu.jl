@@ -149,7 +149,7 @@ function count_neighbor_overlaps(colloid::Colloid, cell_list::CuCellList,
     kneighbor += 1
     jdelta, idelta = divrem(relpos, 3)
     ineighbor = mod(i + idelta - 2, size(cell_list.cells, 2)) + 1
-    jneighbor = mod(i + jdelta - 2, size(cell_list.cells, 3)) + 1
+    jneighbor = mod(j + jdelta - 2, size(cell_list.cells, 3)) + 1
 
     if kneighbor <= cell_list.counts[ineighbor, jneighbor]
         neighbor = cell_list.cells[kneighbor, ineighbor, jneighbor]
