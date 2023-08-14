@@ -1,9 +1,3 @@
-function record!(sim::Simulation, recorder::TrajectoryRecorder)
-    if recorder.cond(sim.timestep)
-        push!(recorder.snapshots, get_snapshot(sim.colloid))
-    end
-end
-
 function update!(sim::Simulation, tuner::MoveSizeTuner, cell_list::CellList)
     if tuner.cond(sim.timestep)
         translation_acceptance, rotation_acceptance = _get_new_acceptance_rates(sim, tuner)
@@ -22,9 +16,8 @@ function update!(sim::Simulation, tuner::MoveSizeTuner, cell_list::CellList)
     return cell_list
 end
 
-function update!(sim::Simulation, compressor::ForcefulCompressor,
-                 cell_list::CellList)
-    if needs_compression(sim, compressor, cell_list)
+function update!(sim::Simulation, compressor::ForcefulCompressor, cell_list::CellList)
+    if _needs_compression(sim, compressor, cell_list)
         if compressor.reached_target
             if sim.gpu
                 if iszero(count_overlaps(sim.colloid, cell_list)
@@ -62,12 +55,31 @@ function update!(sim::Simulation, compressor::ForcefulCompressor,
     return cell_list
 end
 
-@inline function needs_compression(sim::Simulation, compressor::ForcefulCompressor,
-                                   cell_list::CellList)
-    return (!compressor.completed && compressor.cond(sim.timestep)
-        && !has_overlap(sim.colloid, cell_list)
-        && ((!sim.gpu && !has_violation(sim.colloid, sim.constraints))
-            || (sim.gpu && count_violations_gpu(sim.colloid, sim.constraints) == 0)))
+function record!(sim::Simulation, recorder::TrajectoryRecorder, cell_list::CellList)
+    if recorder.cond(sim.timestep)
+        push!(recorder.snapshots, get_snapshot(sim.colloid))
+        push!(recorder.times, sim.timestep)
+    end
+end
+
+function record!(sim::Simulation, recorder::LocalOrderRecorder, cell_list::CellList)
+    if recorder.cond(sim.timestep)
+        if recorder.type == "katic"
+            push!(recorder.orders, katic_order(
+                sim.colloid, cell_list, recorder.typeparams[1]))
+        end
+        push!(recorder.times, sim.timestep)
+    end
+end
+
+function record!(sim::Simulation, recorder::GlobalOrderRecorder, cell_list::CellList)
+    if recorder.cond(sim.timestep)
+        if recorder.type == "orient"
+            push!(recorder.orders,
+                mean(exp.(1im * sim.colloid.sidenum * sim.colloid.angles)))
+        end
+        push!(recorder.times, sim.timestep)
+    end
 end
 
 @inline function _get_new_acceptance_rates(sim::Simulation, tuner::MoveSizeTuner)
@@ -103,16 +115,6 @@ end
     tuner.prev_rejected_rotations = sim.rejected_rotations
 end
 
-@inline function _apply_compression!(sim::Simulation, compressor::ForcefulCompressor)
-    lxnew, lynew = _get_force_compress_dims(sim, compressor)
-    lxold, lyold = sim.colloid.boxsize
-    
-    sim.colloid.boxsize[1], sim.colloid.boxsize[2] = lxnew, lynew
-    pos_scale = (lxnew / lxold, lynew / lyold)
-    sim.colloid.centers .*= pos_scale
-    return pos_scale, lxold, lyold
-end
-
 @inline function _get_force_compress_dims(sim::Simulation, compressor::ForcefulCompressor)
     scale_factor = max(compressor.minscale,
         1.0 - sim.move_radius / (2 * sim.colloid.radius))
@@ -130,4 +132,22 @@ end
     end
 
     return lxnew, lynew
+end
+
+@inline function _needs_compression(sim::Simulation, compressor::ForcefulCompressor,
+                                   cell_list::CellList)
+    return (!compressor.completed && compressor.cond(sim.timestep)
+        && !has_overlap(sim.colloid, cell_list)
+        && ((!sim.gpu && !has_violation(sim.colloid, sim.constraints))
+            || (sim.gpu && count_violations_gpu(sim.colloid, sim.constraints) == 0)))
+end
+
+@inline function _apply_compression!(sim::Simulation, compressor::ForcefulCompressor)
+    lxnew, lynew = _get_force_compress_dims(sim, compressor)
+    lxold, lyold = sim.colloid.boxsize
+    
+    sim.colloid.boxsize[1], sim.colloid.boxsize[2] = lxnew, lynew
+    pos_scale = (lxnew / lxold, lynew / lyold)
+    sim.colloid.centers .*= pos_scale
+    return pos_scale, lxold, lyold
 end

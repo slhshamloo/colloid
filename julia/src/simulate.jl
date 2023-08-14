@@ -56,7 +56,7 @@ function run!(sim::Simulation, timesteps::Integer)
             constraint.update!(sim, constraint)
         end
         for recorder in sim.recorders
-            record!(sim, recorder)
+            record!(sim, recorder, cell_list)
         end
         sim.timestep += 1
     end
