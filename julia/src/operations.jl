@@ -66,7 +66,7 @@ function record!(sim::Simulation, recorder::LocalOrderRecorder, cell_list::CellL
     if recorder.cond(sim.timestep)
         if recorder.type == "katic"
             push!(recorder.orders, katic_order(
-                sim.colloid, cell_list, recorder.typeparams[1]))
+                  sim.colloid, cell_list, recorder.typeparams[1]))
         end
         push!(recorder.times, sim.timestep)
     end
@@ -75,8 +75,8 @@ end
 function record!(sim::Simulation, recorder::GlobalOrderRecorder, cell_list::CellList)
     if recorder.cond(sim.timestep)
         if recorder.type == "orient"
-            push!(recorder.orders,
-                mean(exp.(1im * sim.colloid.sidenum * sim.colloid.angles)))
+            push!(recorder.orders, mean(
+                  exp.(1im * sim.colloid.sidenum * sim.colloid.angles)))
         end
         push!(recorder.times, sim.timestep)
     end
