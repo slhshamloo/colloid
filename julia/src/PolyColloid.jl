@@ -8,6 +8,7 @@ using StaticArrays
 using Statistics
 using Random
 using RecipesBase
+using Colors: Colorant
 import Adapt
 
 const numthreads=(16, 16)
