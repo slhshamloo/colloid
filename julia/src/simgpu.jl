@@ -6,8 +6,7 @@ function apply_step!(sim::Simulation, cell_list::CuCellList)
                          size(cell_list.counts, 2), sweeps)
     randchoices = CUDA.rand(Bool, size(cell_list.cells, 2),
                             size(cell_list.cells, 3), sweeps)
-
-    accept = CuArray(trues(size(cell_list.cells, 2), size(cell_list.cells, 3), sweeps))
+    accept = CuArray(zeros(Int, 4))
     constraints = build_raw_constraints(sim.constraints, eltype(sim.colloid.centers))
 
     for sweep in 1:sweeps
@@ -28,24 +27,19 @@ function apply_step!(sim::Simulation, cell_list::CuCellList)
             rand(sim.numtype) / 2)
         shift_cells!(sim.colloid, cell_list, direction, shift)
     end
-    count_accepted_and_rejected_moves(sim, randchoices, accept)
+    count_accepted_and_rejected_moves!(sim, accept)
 end
 
 @inline getcellcount(cell_list, color) = (
     (size(cell_list.cells, 2) ÷ 2 + (color % 2) * (size(cell_list.cells, 2) % 2))
     * (size(cell_list.cells, 3) ÷ 2 + (color ÷ 3) * (size(cell_list.cells, 3) % 2)))
 
-function count_accepted_and_rejected_moves(
-        sim::Simulation, randchoices::CuArray, accept::CuArray)
-    translations = sum(randchoices)
-    rotations = prod(size(randchoices))
-    accepted_moves = sum(accept)
-    accepted_translations = sum(accept .& randchoices)
-    sim.accepted_translations += sum(accept .& randchoices)
-    sim.rejected_translations += translations - accepted_translations
-    accepted_rotations = accepted_moves - accepted_translations
-    sim.accepted_rotations += accepted_rotations
-    sim.rejected_rotations += rotations - accepted_rotations
+function count_accepted_and_rejected_moves!(sim::Simulation, accept::CuArray)
+    accept = Vector(accept)
+    sim.accepted_translations += accept[1]
+    sim.rejected_translations += accept[2]
+    sim.accepted_rotations += accept[3]
+    sim.rejected_rotations += accept[4]
 end
 
 function apply_parallel_step!(colloid::Colloid, cell_list::CuCellList,
@@ -93,6 +87,7 @@ function apply_parallel_move!(colloid::Colloid, cell_list::CuCellList,
         idx[group] = cell_list.cells[ceil(Int, randnums[1, i, j, sweep]
                                      * cell_list.counts[i, j]), i, j]
         if randchoices[i, j, sweep]
+            angle_change = zero(typeof(rotation_span))
             r = move_radius * randnums[2, i, j, sweep]
             θ = 2π * randnums[3, i, j, sweep]
             x, y = r * cos(θ), r * sin(θ)
@@ -100,6 +95,7 @@ function apply_parallel_move!(colloid::Colloid, cell_list::CuCellList,
             reject_count[group] = ((i, j) != get_cell_list_indices(
                 colloid, cell_list, idx[group]))
         else
+            x, y = zero(typeof(move_radius)), zero(typeof(move_radius))
             angle_change = rotation_span * (randnums[2, i, j, sweep] - 0.5)
             colloid.angles[idx[group]] += angle_change
             reject_count[group] = 0
@@ -111,13 +107,9 @@ function apply_parallel_move!(colloid::Colloid, cell_list::CuCellList,
                  maxcount, group, thread, i, j, is_thread_active)
     CUDA.sync_threads()
 
-    if is_thread_active && thread == 0 && reject_count[group] > 0
-        accept[i, j, sweep] = false
-        if randchoices[i, j, sweep]
-            move!(colloid, idx[group], -x, -y)
-        else
-            colloid.angles[idx[group]] -= angle_change
-        end
+    if is_thread_active && thread == 0
+        count_acceptance!(colloid, accept, x, y, angle_change, idx[group],
+            randchoices[i, j, sweep], reject_count[group] > 0)
     end
     return
 end
@@ -171,6 +163,26 @@ function checkoverlap(colloid::Colloid, cell_list::CuCellList, constraints::RawC
             if slowcheck(colloid, idx[group], dist, distnorm, constraints, constraint_index)
                 CUDA.@atomic reject_count[group] += 1
             end
+        end
+    end
+end
+
+@inline function count_acceptance!(colloid::Colloid, accept::CuDeviceArray,
+        x::Real, y::Real, angle_change::Real, idx::Integer,
+        is_translation::Bool, rejected::Bool)
+    if rejected
+        if is_translation
+            move!(colloid, idx, -x, -y)
+            CUDA.@atomic accept[2] += 1
+        else
+            colloid.angles[idx] -= angle_change
+            CUDA.@atomic accept[4] += 1
+        end
+    else
+        if is_translation
+            CUDA.@atomic accept[1] += 1
+        else
+            CUDA.@atomic accept[3] += 1
         end
     end
 end
