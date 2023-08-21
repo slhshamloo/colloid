@@ -55,6 +55,43 @@ function get_snapshot(colloid::Colloid)
                            Tuple(colloid.boxsize))
 end
 
+function katic_order(colloid::Colloid, cell_list::SeqCellList, k::Integer;
+                     numtype::DataType = Float32)
+    orders = zeros(particle_count(colloid), Complex{numtype})
+    for cell in CartesianIndices(cell_list.cells)
+        i, j = Tuple(cell)
+        for idx in cell_list.cells[i, j]
+            neighbor_r = Vector{numtype}(undef, 0)
+            neighbor_angle = Vector{numtype}(undef, 0)
+            for neighbor_cell in (
+                    cell_list.cells[mod(i - 2, size(cell_list.counts, 1)) + 1,
+                                    mod(j - 2, size(cell_list.counts, 2)) + 1],
+                    cell_list.cells[mod(i - 2, size(cell_list.counts, 1)) + 1, j],
+                    cell_list.cells[mod(i - 2, size(cell_list.counts, 1)) + 1,
+                                    mod(j, size(cell_list.counts, 1)) + 1],
+                    cell_list.cells[i, mod(j - 2, size(cell_list.counts, 1)) + 1],
+                    cell_list.cells[i, j] - 1,
+                    cell_list.cells[i, mod(j, size(cell_list.counts, 1)) + 1],
+                    cell_list.cells[mod(i, size(cell_list.counts, 1)) + 1,
+                                    mod(j - 2, size(cell_list.counts, 2)) + 1],
+                    cell_list.cells[mod(i, size(cell_list.counts, 1)) + 1, j],
+                    cell_list.cells[mod(i, size(cell_list.counts, 1)) + 1,
+                                    mod(j, size(cell_list.counts, 1)) + 1])
+                for neighbor in neighbor_cell
+                    r, angle = get_dist_and_angle(colloid, idx, neighbor)
+                    push!(neighbor_r, r)
+                    push!(neighbor_angle, angle)
+                end
+            end
+            if length(neighbor_r) >= k
+                neighbor_angle = neighbor_angle[partialsortperm(neighbor_r, 1:k)]
+                orders[idx] += sum(exp.(1im * k * neighbor_angle)) / k
+            end
+        end
+    end
+    return orders
+end
+
 function katic_order(colloid::Colloid, cell_list::CuCellList, k::Integer)
     blockthreads = (numthreads[1] * numthreads[2])
     maxcount = maximum(cell_list.counts)
