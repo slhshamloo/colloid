@@ -47,7 +47,8 @@ function _build_vertices(sidenum::Integer, radius::Real,
     return vertices
 end
 
-function crystallize!(colloid::Colloid)
+function crystallize!(colloid::Colloid,
+        constraint::Function = (colloid, centers) -> trues(size(centers, 2)))
     particles_per_side = ceil(Int, √(particle_count(colloid)))
     shortside = minimum(colloid.boxsize)
     shortdim = argmin(colloid.boxsize)
@@ -61,6 +62,9 @@ function crystallize!(colloid::Colloid)
     xs = shortdim == 1 ? shortpos : longpos
     ys = shortdim == 2 ? shortpos : longpos
     centers = permutedims(hcat(xs, ys))
+    valid = constraint(colloid, centers)
+    centers = centers[vcat(valid, valid)]
+    centers = reshape(centers, 2, length(centers)÷2)
     centers = centers[:, 1:particle_count(colloid)]
 
     if isa(colloid.centers, CuArray)
