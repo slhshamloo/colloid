@@ -47,9 +47,9 @@ function _build_vertices(sidenum::Integer, radius::Real,
     return vertices
 end
 
-function crystallize!(colloid::Colloid,
+function crystallize!(colloid::Colloid, gridcount::Integer = particle_count(colloid),
         constraint::Function = (colloid, centers) -> trues(size(centers, 2)))
-    particles_per_side = ceil(Int, √(particle_count(colloid)))
+    particles_per_side = ceil(Int, √(gridcount))
     shortside = minimum(colloid.boxsize)
     shortdim = argmin(colloid.boxsize)
     spacing = shortside / particles_per_side
