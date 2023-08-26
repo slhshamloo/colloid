@@ -7,6 +7,7 @@ using CUDA
 using StaticArrays
 using Statistics
 using Random
+using JLD2
 using RecipesBase
 using Colors: Colorant
 import Adapt

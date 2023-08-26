@@ -6,13 +6,19 @@ struct ColloidSnapshot
     boxsize::Tuple{<:Real, <:Real}
 end
 
-struct TrajectoryRecorder <: AbstractRecorder
+mutable struct TrajectoryRecorder <: AbstractRecorder
+    filepath::Union{String, Nothing}
+    filecounter::Integer
+    savetomem::Bool
+    safe::Bool
     snapshots::Vector{ColloidSnapshot}
     times::Vector{Int}
     cond::Function
 
-    function TrajectoryRecorder(cond::Function)
-        new(ColloidSnapshot[], Int[], cond)
+    function TrajectoryRecorder(cond::Function;
+            filepath::Union{String, Nothing} = nothing,
+            savetomem::Bool = false, safe::Bool = false)
+        new(filepath, 0, savetomem, safe, ColloidSnapshot[], Int[], cond)
     end
 end
 
