@@ -1,24 +1,17 @@
 abstract type AbstractRecorder end
 
-struct ColloidSnapshot
-    centers::AbstractMatrix
-    angles::AbstractVector
-    boxsize::Tuple{<:Real, <:Real}
-end
-
 mutable struct TrajectoryRecorder <: AbstractRecorder
     filepath::Union{String, Nothing}
     filecounter::Integer
+    trajectory::Union{Trajectory, Nothing}
     savetomem::Bool
     safe::Bool
-    snapshots::Vector{ColloidSnapshot}
-    times::Vector{Int}
     cond::Function
 
     function TrajectoryRecorder(cond::Function;
             filepath::Union{String, Nothing} = nothing,
             savetomem::Bool = false, safe::Bool = false)
-        new(filepath, 0, savetomem, safe, ColloidSnapshot[], Int[], cond)
+        new(filepath, 0, nothing, savetomem, safe, cond)
     end
 end
 
@@ -54,9 +47,4 @@ struct GlobalOrderRecorder{T <: Number} <: AbstractRecorder
         orders = Vector{numtype}(undef, 0)
         new{numtype}(type, typeparams, orders, Int[], cond)
     end
-end
-
-function get_snapshot(colloid::Colloid)
-    return ColloidSnapshot(Matrix(colloid.centers), Vector(colloid.angles),
-                           Tuple(colloid.boxsize))
 end
