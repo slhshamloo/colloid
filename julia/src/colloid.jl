@@ -8,8 +8,27 @@ struct Colloid{T<:Real, V<:AbstractVector, M<:AbstractMatrix, VB<:AbstractVector
     angles::V
 end
 
+function Colloid{T}(sidenum::Integer, radius::Real, boxsize::Tuple{<:Real, <:Real},
+                    centers::AbstractMatrix, angles::AbstractArray;
+                    gpu=false) where {T<:Real}
+    bisector = radius * cos(π / sidenum)
+
+    if gpu
+        angles = CuVector{T}(angles)
+        centers = CuMatrix{T}(centers)
+        boxsize = CuVector{T}([boxsize[1], boxsize[2]])
+    else
+        angles = Vector{T}(angles)
+        centers = Matrix{T}(centers)
+        boxsize = MVector{2, T}(boxsize)
+    end
+
+    Colloid{T, typeof(angles), typeof(centers), typeof(boxsize)}(
+        sidenum, radius, bisector, boxsize, centers, angles)
+end
+
 function Colloid{T}(particle_count::Integer, sidenum::Integer, radius::Real,
-        boxsize::Tuple{<:Real, <:Real}; gpu=false) where {T<:Real}
+                    boxsize::Tuple{<:Real, <:Real}; gpu=false) where {T<:Real}
     bisector = radius * cos(π / sidenum)
 
     if gpu
