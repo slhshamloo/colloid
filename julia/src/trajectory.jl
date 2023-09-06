@@ -16,7 +16,7 @@ struct ColloidTrajectory
     times::AbstractVector
 end
 
-struct ColloidTrajectoryReader
+struct TrajectoryReader
     filepath::String
 end
 
@@ -66,7 +66,7 @@ Base.getindex(trajectory::ColloidTrajectory, frames::AbstractUnitRange) = Colloi
     trajectory.sidenum, trajectory.radius, trajectory.boxsizes[frames],
     trajectory.centers[frames], trajectory.angles[frames], trajectory.times[frames])
 
-function Base.getindex(reader::ColloidTrajectoryReader, frame::Int)
+function Base.getindex(reader::TrajectoryReader, frame::Int)
     jldopen(reader.filepath) do f
         boxsize = f["frame$frame/boxsize"]
         return ColloidSnapshot(f["sidenum"], f["radius"], (boxsize[1], boxsize[2]),
@@ -74,7 +74,7 @@ function Base.getindex(reader::ColloidTrajectoryReader, frame::Int)
     end
 end
 
-function Base.getindex(reader::ColloidTrajectoryReader, frames::AbstractUnitRange)
+function Base.getindex(reader::TrajectoryReader, frames::AbstractUnitRange)
     jldopen(reader.filepath) do f
         sidenum, radius = f["sidenum"], f["radius"]
     
@@ -95,6 +95,8 @@ function Base.getindex(reader::ColloidTrajectoryReader, frames::AbstractUnitRang
         return ColloidTrajectory(sidenum, radius, boxsizes, centers, angles, times)
     end
 end
+
+@inline Base.length(trajectory::ColloidTrajectory) = length(trajectory.times)
 
 @inline particle_count(snapshot::ColloidSnapshot) = size(snapshot.centers, 2)
 
