@@ -2,12 +2,12 @@ function apply_step!(sim::Simulation, cell_list::CuCellList)
     blockthreads = numthreads[1] * numthreads[2]
     sweeps = ceil(Int, mean(cell_list.counts))
 
-    randnums = CUDA.rand(sim.numtype, 3, size(cell_list.counts, 1),
+    randnums = CUDA.rand(sim.numtype, 4, size(cell_list.counts, 1),
                          size(cell_list.counts, 2), sweeps)
     randchoices = CUDA.rand(Bool, size(cell_list.cells, 2),
                             size(cell_list.cells, 3), sweeps)
     accept = CuArray(zeros(Int, 4))
-    constraints = build_raw_constraints(sim.constraints, eltype(sim.colloid.centers))
+    constraints = build_raw_constraints(sim.constraints, sim.numtype)
 
     for sweep in 1:sweeps
         maxcount = maximum(cell_list.counts)
@@ -17,10 +17,11 @@ function apply_step!(sim::Simulation, cell_list::CuCellList)
             cellcount = getcellcount(cell_list, color)
             numblocks = cellcount ÷ groups_per_block + 1
             @cuda(threads=blockthreads, blocks=numblocks,
-                  shmem = 2 * groups_per_block * sizeof(Int32), apply_parallel_step!(
-                  sim.colloid, cell_list, color, sweep, maxcount, groupcount, cellcount,
-                  sim.move_radius, sim.rotation_span, randnums, randchoices, accept,
-                  constraints))
+                  shmem = groups_per_block * (2 * sizeof(Int32) + sizeof(sim.numtype)),
+                  apply_parallel_step!(sim.colloid, cell_list, color, sweep, maxcount,
+                      groupcount, cellcount, sim.move_radius, sim.rotation_span, sim.beta,
+                      randnums, randchoices, accept, constraints, sim.potential,
+                      sim.pairpotential))
         end
         direction = ((1, 0), (-1, 0), (0, 1), (0, -1))[rand(1:4)]
         shift = (direction[2] == 0 ? cell_list.width[1] : cell_list.width[2]) * (
@@ -42,16 +43,18 @@ function count_accepted_and_rejected_moves!(sim::Simulation, accept::CuArray)
     sim.rejected_rotations += accept[4]
 end
 
-function apply_parallel_step!(colloid::Colloid, cell_list::CuCellList,
-        color::Integer, sweep::Integer, maxcount::Integer, groupcount::Integer,
-        cellcount::Integer, move_radius::Real, rotation_span::Real,
-        randnums::CuDeviceArray, randchoices::CuDeviceArray, accept::CuDeviceArray,
-        constraints::RawConstraints)
+function apply_parallel_step!(colloid::Colloid, cell_list::CuCellList, color::Integer,
+        sweep::Integer, maxcount::Integer, groupcount::Integer, cellcount::Integer,
+        move_radius::Real, rotation_span::Real, beta::Real, randnums::CuDeviceArray,
+        randchoices::CuDeviceArray, accept::CuDeviceArray, constraints::RawConstraints,
+        potential::Union{Function, Nothing}, pairpotential::Union{Function, Nothing})
     is_thread_active = true
     groups_per_block = blockDim().x ÷ groupcount
     shared_memory = CuDynamicSharedArray(Int32, 2 * groups_per_block)
     reject_count = @view shared_memory[1:groups_per_block]
     idx = @view shared_memory[groups_per_block+1:end]
+    group_potentials = CuDynamicSharedArray(eltype(colloid.centers), groups_per_block,
+                                            2 * groups_per_block * sizeof(Int32))
 
     if threadIdx().x > groups_per_block * groupcount
         is_thread_active = false
@@ -72,22 +75,29 @@ function apply_parallel_step!(colloid::Colloid, cell_list::CuCellList,
         end
     end
 
-    apply_parallel_move!(colloid, cell_list, randnums, randchoices,
-        accept, constraints, reject_count, idx, move_radius, rotation_span,
-        maxcount, group, thread, sweep, i, j, is_thread_active)
+    apply_parallel_move!(colloid, cell_list, randnums, randchoices, accept, constraints,
+        potential, pairpotential, idx, reject_count, group_potentials, move_radius,
+        rotation_span, beta, groupcount, maxcount, group, thread, sweep,
+        i, j, is_thread_active)
     return
 end
 
 function apply_parallel_move!(colloid::Colloid, cell_list::CuCellList,
         randnums::CuDeviceArray, randchoices::CuDeviceArray, accept::CuDeviceArray,
-        constraints::RawConstraints, reject_count::SubArray, idx::SubArray,
-        move_radius::Real, rotation_span::Real, maxcount::Integer, group::Integer,
-        thread::Integer, sweep::Integer, i::Integer, j::Integer, is_thread_active::Bool)
+        constraints::RawConstraints, potential::Union{Function, Nothing},
+        pairpotential::Union{Function, Nothing}, idx::SubArray, reject_count::SubArray,
+        group_potentials::CuDeviceArray, move_radius::Real, rotation_span::Real, beta::Real,
+        groupcount::Integer, maxcount::Integer, group::Integer, thread::Integer,
+        sweep::Integer, i::Integer, j::Integer, is_thread_active::Bool)
+    xprev, yprev = zero(eltype(colloid.centers)), zero(eltype(colloid.centers))
+    angle_change = zero(typeof(rotation_span))
     if is_thread_active && thread == 0
+        group_potentials[group] = zero(eltype(group_potentials))
         idx[group] = cell_list.cells[ceil(Int, randnums[1, i, j, sweep]
                                      * cell_list.counts[i, j]), i, j]
         if randchoices[i, j, sweep]
-            angle_change = zero(typeof(rotation_span))
+            xprev = colloid.centers[1, idx[group]]
+            yprev = colloid.centers[2, idx[group]]
             r = move_radius * randnums[2, i, j, sweep]
             θ = 2π * randnums[3, i, j, sweep]
             x, y = r * cos(θ), r * sin(θ)
@@ -95,7 +105,6 @@ function apply_parallel_move!(colloid::Colloid, cell_list::CuCellList,
             reject_count[group] = ((i, j) != get_cell_list_indices(
                 colloid, cell_list, idx[group]))
         else
-            x, y = zero(typeof(move_radius)), zero(typeof(move_radius))
             angle_change = rotation_span * (randnums[2, i, j, sweep] - 0.5)
             colloid.angles[idx[group]] += angle_change
             reject_count[group] = 0
@@ -103,19 +112,29 @@ function apply_parallel_move!(colloid::Colloid, cell_list::CuCellList,
     end
     CUDA.sync_threads()
 
-    checkoverlap(colloid, cell_list, constraints, reject_count, idx,
-                 maxcount, group, thread, i, j, is_thread_active)
+    if isnothing(pairpotential)
+        checkoverlap!(colloid, cell_list, constraints, idx, reject_count,
+                     maxcount, group, thread, i, j, is_thread_active)
+    elseif groupcount > 9 * maxcount
+        checkconstraint!(colloid, constraints, idx, reject_count,
+                         maxcount, group, thread, is_thread_active)
+    end
+    if (!isnothing(potential) || !isnothing(pairpotential))
+        checkpotential!(colloid, cell_list, xprev, yprev, angle_change, beta, potential,
+                        pairpotential, randnums, group_potentials, idx, reject_count,
+                        maxcount, group, thread, sweep, i, j, is_thread_active)
+    end
     CUDA.sync_threads()
 
     if is_thread_active && thread == 0
-        count_acceptance!(colloid, accept, x, y, angle_change, idx[group],
+        count_acceptance!(colloid, accept, xprev, yprev, angle_change, idx[group],
             randchoices[i, j, sweep], reject_count[group] > 0)
     end
     return
 end
 
-function checkoverlap(colloid::Colloid, cell_list::CuCellList, constraints::RawConstraints,
-        reject_count::SubArray, idx::SubArray, maxcount::Integer, group::Integer,
+function checkoverlap!(colloid::Colloid, cell_list::CuCellList, constraints::RawConstraints,
+        idx::SubArray, reject_count::SubArray, maxcount::Integer, group::Integer,
         thread::Integer, i::Integer, j::Integer, is_thread_active::Bool)
     passed_circumference_check, passed_fast_check = false, false
     if is_thread_active && reject_count[group] == 0
@@ -153,13 +172,13 @@ function checkoverlap(colloid::Colloid, cell_list::CuCellList, constraints::RawC
     CUDA.sync_threads()
 
     if is_thread_active && reject_count[group] == 0
-        if passed_circumference_check && reject_count[group] == 0
+        if passed_circumference_check
             if (_is_vertex_overlapping(colloid, idx[group], neighbor, distnorm, centerangle)
                     || _is_vertex_overlapping(colloid, neighbor, idx[group], distnorm,
-                                            π + centerangle))
+                                              π + centerangle))
                 CUDA.@atomic reject_count[group] += 1
             end
-        elseif passed_fast_check && reject_count[group] == 0
+        elseif passed_fast_check
             if slowcheck(colloid, idx[group], dist, distnorm, constraints, constraint_index)
                 CUDA.@atomic reject_count[group] += 1
             end
@@ -167,12 +186,76 @@ function checkoverlap(colloid::Colloid, cell_list::CuCellList, constraints::RawC
     end
 end
 
+function checkconstraint!(colloid::Colloid, constraints::RawConstraints,
+        idx::SubArray, reject_count::SubArray, maxcount::Integer, group::Integer,
+        thread::Integer, is_thread_active::Bool)
+    passed_fast_check = false
+    if is_thread_active && reject_count[group] == 0
+        constraint_index = thread - 9 * maxcount + 1
+        if constraint_index > 0
+            definite_overlap, out_of_range, dist, distnorm = fastcheck(
+                colloid, idx[group], constraints, constraint_index)
+            if definite_overlap
+                CUDA.@atomic reject_count[group] += 1 
+            elseif !out_of_range
+                passed_fast_check = true
+            end
+        end
+    end
+    CUDA.sync_threads()
+
+    if is_thread_active && reject_count[group] == 0
+        if passed_fast_check
+            if slowcheck(colloid, idx[group], dist, distnorm, constraints, constraint_index)
+                CUDA.@atomic reject_count[group] += 1
+            end
+        end
+    end
+end
+ 
+function checkpotential!(colloid::Colloid, cell_list::CuCellList, xprev::Real, yprev::Real,
+        angle_change::Real, beta::Real, potential::Union{Function, Nothing},
+        pairpotential::Union{Function, Nothing}, randnums::CuDeviceArray,
+        group_potentials::CuDeviceArray, idx::SubArray, reject_count::SubArray,
+        maxcount::Integer, group::Integer, thread::Integer,
+        sweep::Integer, i::Integer, j::Integer, is_thread_active::Bool)
+    if is_thread_active && reject_count[group] == 0 && thread <= 9 * maxcount
+        if !isnothing(pairpotential)
+            relpos, k = divrem(thread, maxcount)
+            k += 1
+            jdelta, idelta = divrem(relpos, 3)
+            ineighbor = mod(i + idelta - 2, size(cell_list.cells, 2)) + 1
+            jneighbor = mod(j + jdelta - 2, size(cell_list.cells, 3)) + 1
+
+            if k <= cell_list.counts[ineighbor, jneighbor]
+                neighbor = cell_list.cells[k, ineighbor, jneighbor]
+                if idx[group] != neighbor
+                    CUDA.@atomic group_potentials[group] += pairpotential(
+                        colloid, idx[group], neighbor, xprev, yprev, angle_change)
+                end
+            end
+        end
+        if !isnothing(potential) && thread == 0
+            CUDA.@atomic group_potentials[group] += potential(
+                colloid, idx[group], xprev, yprev, angle_change)
+        end
+    end
+    CUDA.sync_threads()
+
+    if is_thread_active && reject_count[group] == 0 && thread == 0
+        if randnums[4, i, j, sweep] > exp(-beta * group_potentials[group])
+            reject_count[group] += 1
+        end
+    end
+end
+
 @inline function count_acceptance!(colloid::Colloid, accept::CuDeviceArray,
-        x::Real, y::Real, angle_change::Real, idx::Integer,
+        xprev::Real, yprev::Real, angle_change::Real, idx::Integer,
         is_translation::Bool, rejected::Bool)
     if rejected
         if is_translation
-            move!(colloid, idx, -x, -y)
+            colloid.centers[1, idx] = xprev
+            colloid.centers[2, idx] = yprev
             CUDA.@atomic accept[2] += 1
         else
             colloid.angles[idx] -= angle_change

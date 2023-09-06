@@ -16,12 +16,18 @@ mutable struct Simulation
     recorders::AbstractVector{<:AbstractRecorder}
     updaters::AbstractVector{<:AbstractUpdater}
 
-    numtype::DataType
+    beta::Real
+    potential::Union{Function, Nothing}
+    pairpotential::Union{Function, Nothing}
+
     gpu::Bool
+    numtype::DataType
 
     function Simulation(particle_count::Integer, sidenum::Integer, radius::Real,
-        boxsize::Tuple{<:Real, <:Real}; seed::Integer=-1, gpu=false,
-        numtype::DataType=Float32)
+        boxsize::Tuple{<:Real, <:Real}; seed::Integer = -1, gpu::Bool = false,
+        double::Bool = false, beta::Real = 1, potential = nothing,
+        pairpotential = nothing)
+    numtype = double ? Float64 : Float32
     if seed == -1
         seed = rand(0:typemax(UInt))
     end
@@ -34,7 +40,7 @@ mutable struct Simulation
     end
     new(colloid, seed, 0, zero(numtype), zero(numtype), 0, 0, 0, 0,
         AbstractConstraint[], AbstractRecorder[], AbstractUpdater[],
-        numtype, gpu)
+        convert(numtype, beta), potential, pairpotential, gpu, numtype)
     end
 end
 
