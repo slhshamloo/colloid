@@ -95,3 +95,8 @@ function Base.getindex(reader::ColloidTrajectoryReader, frames::AbstractUnitRang
         return ColloidTrajectory(sidenum, radius, boxsizes, centers, angles, times)
     end
 end
+
+@inline particle_count(snapshot::ColloidSnapshot) = size(snapshot.centers, 2)
+
+@inline particle_area(snapshot::ColloidSnapshot) = (
+    0.5 * snapshot.sidenum * snapshot.radius^2 * sin(2π / snapshot.sidenum))
