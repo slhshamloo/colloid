@@ -2,7 +2,7 @@ function record!(sim::Simulation, recorder::TrajectoryRecorder, cell_list::CellL
     if recorder.cond(sim.timestep)
         if recorder.savetomem
             if isnothing(recorder.trajectory)
-                recorder.trajectory = Trajectory(
+                recorder.trajectory = ColloidTrajectory(
                     sim.colloid.sidenum, sim.colloid.radius,
                     Vector{Vector{eltype(sim.colloid.boxsize)}}(undef, 0),
                     Vector{Matrix{eltype(sim.colloid.centers)}}(undef, 0),

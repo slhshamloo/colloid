@@ -4,7 +4,7 @@ abstract type AbstractUpdater end
 mutable struct TrajectoryRecorder <: AbstractRecorder
     filepath::Union{String, Nothing}
     filecounter::Integer
-    trajectory::Union{Trajectory, Nothing}
+    trajectory::Union{ColloidTrajectory, Nothing}
     savetomem::Bool
     safe::Bool
     cond::Function

@@ -7,7 +7,7 @@ struct ColloidSnapshot
     time::Integer
 end
 
-struct Trajectory
+struct ColloidTrajectory
     sidenum::Integer
     radius::Real
     boxsizes::AbstractVector
@@ -16,15 +16,19 @@ struct Trajectory
     times::AbstractVector
 end
 
-struct TrajectoryReader
+struct ColloidTrajectoryReader
     filepath::String
 end
+
+ColloidSnapshot(colloid::Colloid) = ColloidSnapshot(
+    colloid.sidenum, colloid.radius, Tuple(colloid.boxsize),
+    Array(colloid.centers), Array(colloid.angles), 0) 
 
 Colloid(snapshot::ColloidSnapshot; gpu=false) = Colloid{eltype(snapshot.centers)}(
     snapshot.sidenum, snapshot.radius, snapshot.boxsize,
     snapshot.centers, snapshot.angles; gpu=gpu)
 
-function Trajectory(filepath)
+function ColloidTrajectory(filepath)
     jldopen(filepath) do f
         sidenum, radius = f["sidenum"], f["radius"]
     
@@ -49,20 +53,20 @@ function Trajectory(filepath)
                 throw(e)
             end
         end
-        return Trajectory(sidenum, radius, boxsizes, centers, angles, times)
+        return ColloidTrajectory(sidenum, radius, boxsizes, centers, angles, times)
     end
 end
 
-Base.getindex(trajectory::Trajectory, frame::Int) = ColloidSnapshot(
+Base.getindex(trajectory::ColloidTrajectory, frame::Int) = ColloidSnapshot(
     trajectory.sidenum, trajectory.radius,
     ((trajectory.boxsizes[frame])[1], (trajectory.boxsizes[frame])[2]),
     trajectory.centers[frame], trajectory.angles[frame], trajectory.times[frame])
 
-Base.getindex(trajectory::Trajectory, frames::AbstractUnitRange) = Trajectory(
+Base.getindex(trajectory::ColloidTrajectory, frames::AbstractUnitRange) = ColloidTrajectory(
     trajectory.sidenum, trajectory.radius, trajectory.boxsizes[frames],
     trajectory.centers[frames], trajectory.angles[frames], trajectory.times[frames])
 
-function Base.getindex(reader::TrajectoryReader, frame::Int)
+function Base.getindex(reader::ColloidTrajectoryReader, frame::Int)
     jldopen(reader.filepath) do f
         boxsize = f["frame$frame/boxsize"]
         return ColloidSnapshot(f["sidenum"], f["radius"], (boxsize[1], boxsize[2]),
@@ -70,7 +74,7 @@ function Base.getindex(reader::TrajectoryReader, frame::Int)
     end
 end
 
-function Base.getindex(reader::TrajectoryReader, frames::AbstractUnitRange)
+function Base.getindex(reader::ColloidTrajectoryReader, frames::AbstractUnitRange)
     jldopen(reader.filepath) do f
         sidenum, radius = f["sidenum"], f["radius"]
     
@@ -88,6 +92,6 @@ function Base.getindex(reader::TrajectoryReader, frames::AbstractUnitRange)
             push!(times, f["frame$frame/time"])
             frame += 1
         end
-        return Trajectory(sidenum, radius, boxsizes, centers, angles, times)
+        return ColloidTrajectory(sidenum, radius, boxsizes, centers, angles, times)
     end
 end
