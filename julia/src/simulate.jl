@@ -49,12 +49,17 @@ function run!(sim::Simulation, timesteps::Integer)
         sim.accepted_rotations, sim.rejected_rotations) = (0, 0, 0, 0)
     if sim.gpu
         cell_list = CuCellList(sim.colloid)
+        constraints = build_raw_constraints(sim.constraints, sim.numtype)
     else
         cell_list = SeqCellList(sim.colloid)
     end
 
     for _ in 1:timesteps
-        apply_step!(sim, cell_list)
+        if sim.gpu
+            apply_step!(sim, cell_list, constraints)
+        else
+            apply_step!(sim, cell_list)
+        end
         for updater in sim.updaters
             cell_list = update!(sim, updater, cell_list)
         end

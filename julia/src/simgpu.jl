@@ -1,4 +1,4 @@
-function apply_step!(sim::Simulation, cell_list::CuCellList)
+function apply_step!(sim::Simulation, cell_list::CuCellList, constraints::RawConstraints)
     blockthreads = numthreads[1] * numthreads[2]
     sweeps = ceil(Int, mean(cell_list.counts))
 
@@ -7,7 +7,6 @@ function apply_step!(sim::Simulation, cell_list::CuCellList)
     randchoices = CUDA.rand(Bool, size(cell_list.cells, 2),
                             size(cell_list.cells, 3), sweeps)
     accept = CuArray(zeros(Int, 4))
-    constraints = build_raw_constraints(sim.constraints, sim.numtype)
 
     for sweep in 1:sweeps
         maxcount = maximum(cell_list.counts)
