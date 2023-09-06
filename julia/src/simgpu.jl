@@ -89,6 +89,37 @@ function apply_parallel_move!(colloid::Colloid, cell_list::CuCellList,
         group_potentials::CuDeviceArray, move_radius::Real, rotation_span::Real, beta::Real,
         groupcount::Integer, maxcount::Integer, group::Integer, thread::Integer,
         sweep::Integer, i::Integer, j::Integer, is_thread_active::Bool)
+    xprev, yprev, angle_change = apply_parallel_trial!(
+        colloid, cell_list, randnums, randchoices, group_potentials, idx, reject_count,
+        move_radius, rotation_span, group, thread, sweep, i, j, is_thread_active)
+    CUDA.sync_threads()
+
+    if isnothing(pairpotential)
+        checkoverlap!(colloid, cell_list, constraints, idx, reject_count,
+                      maxcount, group, thread, i, j, is_thread_active)
+    elseif groupcount > 9 * maxcount
+        checkconstraint!(colloid, constraints, idx, reject_count,
+                         maxcount, group, thread, is_thread_active)
+    end
+    if (!isnothing(potential) || !isnothing(pairpotential))
+        checkpotential!(colloid, cell_list, xprev, yprev, angle_change, beta, potential,
+                        pairpotential, randnums, group_potentials, idx, reject_count,
+                        maxcount, group, thread, sweep, i, j, is_thread_active)
+    end
+    CUDA.sync_threads()
+
+    if is_thread_active && thread == 0
+        apply_parallel_acceptance!(colloid, accept, xprev, yprev, angle_change, idx[group],
+                                   randchoices[i, j, sweep], reject_count[group] > 0)
+    end
+    return
+end
+
+function apply_parallel_trial!(colloid::Colloid, cell_list::CuCellList,
+        randnums::CuDeviceArray, randchoices::CuDeviceArray,
+        group_potentials::CuDeviceArray, idx::SubArray, reject_count::SubArray,
+        move_radius::Real, rotation_span::Real, group::Integer, thread::Integer,
+        sweep::Integer, i::Integer, j::Integer, is_thread_active::Bool)
     xprev, yprev = zero(eltype(colloid.centers)), zero(eltype(colloid.centers))
     angle_change = zero(typeof(rotation_span))
     if is_thread_active && thread == 0
@@ -110,27 +141,7 @@ function apply_parallel_move!(colloid::Colloid, cell_list::CuCellList,
             reject_count[group] = 0
         end
     end
-    CUDA.sync_threads()
-
-    if isnothing(pairpotential)
-        checkoverlap!(colloid, cell_list, constraints, idx, reject_count,
-                     maxcount, group, thread, i, j, is_thread_active)
-    elseif groupcount > 9 * maxcount
-        checkconstraint!(colloid, constraints, idx, reject_count,
-                         maxcount, group, thread, is_thread_active)
-    end
-    if (!isnothing(potential) || !isnothing(pairpotential))
-        checkpotential!(colloid, cell_list, xprev, yprev, angle_change, beta, potential,
-                        pairpotential, randnums, group_potentials, idx, reject_count,
-                        maxcount, group, thread, sweep, i, j, is_thread_active)
-    end
-    CUDA.sync_threads()
-
-    if is_thread_active && thread == 0
-        count_acceptance!(colloid, accept, xprev, yprev, angle_change, idx[group],
-            randchoices[i, j, sweep], reject_count[group] > 0)
-    end
-    return
+    return xprev, yprev, angle_change
 end
 
 function checkoverlap!(colloid::Colloid, cell_list::CuCellList, constraints::RawConstraints,
@@ -140,33 +151,12 @@ function checkoverlap!(colloid::Colloid, cell_list::CuCellList, constraints::Raw
     if is_thread_active && reject_count[group] == 0
         constraint_index = thread - 9 * maxcount + 1
         if constraint_index > 0
-            definite_overlap, out_of_range, dist, distnorm = fastcheck(
-                colloid, idx[group], constraints, constraint_index)
-            if definite_overlap
-                CUDA.@atomic reject_count[group] += 1 
-            elseif !out_of_range
-                passed_fast_check = true
-            end
+            passed_fast_check, dist, distnorm = constraint_step_one!(
+                colloid, constraints, reject_count, idx[group], constraint_index, group)
         else
-            relpos, k = divrem(thread, maxcount)
-            k += 1
-            jdelta, idelta = divrem(relpos, 3)
-            ineighbor = mod(i + idelta - 2, size(cell_list.cells, 2)) + 1
-            jneighbor = mod(j + jdelta - 2, size(cell_list.cells, 3)) + 1
-
-            if k <= cell_list.counts[ineighbor, jneighbor]
-                neighbor = cell_list.cells[k, ineighbor, jneighbor]
-                if idx[group] != neighbor
-                    definite_overlap, out_of_range, dist, distnorm = _overlap_range(
-                        colloid, idx[group], neighbor)
-                    if definite_overlap
-                        CUDA.@atomic reject_count[group] += 1
-                    elseif !out_of_range
-                        passed_circumference_check = true
-                        centerangle = (dist[2] < 0 ? -1 : 1) * acos(dist[1] / distnorm)
-                    end
-                end
-            end
+            passed_circumference_check, centerangle, neighbor, dist, distnorm = 
+                overlap_step_one!(colloid, cell_list, reject_count, idx[group],
+                                  group, thread, maxcount, i, j)
         end
     end
     CUDA.sync_threads()
@@ -193,13 +183,8 @@ function checkconstraint!(colloid::Colloid, constraints::RawConstraints,
     if is_thread_active && reject_count[group] == 0
         constraint_index = thread - 9 * maxcount + 1
         if constraint_index > 0
-            definite_overlap, out_of_range, dist, distnorm = fastcheck(
-                colloid, idx[group], constraints, constraint_index)
-            if definite_overlap
-                CUDA.@atomic reject_count[group] += 1 
-            elseif !out_of_range
-                passed_fast_check = true
-            end
+            passed_fast_check, dist, distnorm = constraint_step_one!(
+                colloid, constraints, reject_count, idx[group], constraint_index, group)
         end
     end
     CUDA.sync_threads()
@@ -221,12 +206,8 @@ function checkpotential!(colloid::Colloid, cell_list::CuCellList, xprev::Real, y
         sweep::Integer, i::Integer, j::Integer, is_thread_active::Bool)
     if is_thread_active && reject_count[group] == 0 && thread <= 9 * maxcount
         if !isnothing(pairpotential)
-            relpos, k = divrem(thread, maxcount)
-            k += 1
-            jdelta, idelta = divrem(relpos, 3)
-            ineighbor = mod(i + idelta - 2, size(cell_list.cells, 2)) + 1
-            jneighbor = mod(j + jdelta - 2, size(cell_list.cells, 3)) + 1
-
+            ineighbor, jneighbor, k = get_neighbor_indices(
+                cell_list, thread, maxcount, i, j)
             if k <= cell_list.counts[ineighbor, jneighbor]
                 neighbor = cell_list.cells[k, ineighbor, jneighbor]
                 if idx[group] != neighbor
@@ -249,7 +230,7 @@ function checkpotential!(colloid::Colloid, cell_list::CuCellList, xprev::Real, y
     end
 end
 
-@inline function count_acceptance!(colloid::Colloid, accept::CuDeviceArray,
+@inline function apply_parallel_acceptance!(colloid::Colloid, accept::CuDeviceArray,
         xprev::Real, yprev::Real, angle_change::Real, idx::Integer,
         is_translation::Bool, rejected::Bool)
     if rejected
@@ -268,4 +249,51 @@ end
             CUDA.@atomic accept[3] += 1
         end
     end
+end
+
+@inline function get_neighbor_indices(cell_list::CuCellList, thread::Integer,
+        maxcount::Integer, i::Integer, j::Integer)
+    relpos, kneighbor = divrem(thread, maxcount)
+    kneighbor += 1
+    jdelta, idelta = divrem(relpos, 3)
+    ineighbor = mod(i + idelta - 2, size(cell_list.cells, 2)) + 1
+    jneighbor = mod(j + jdelta - 2, size(cell_list.cells, 3)) + 1
+    return ineighbor, jneighbor, kneighbor
+end
+
+function overlap_step_one!(colloid::Colloid, cell_list::CuCellList,
+        reject_count::SubArray, idx::Integer, group::Integer, thread::Integer,
+        maxcount::Integer, i::Integer, j::Integer)
+    passed_circumference_check, neighbor = false, zero(Int32)
+    distnorm, centerangle = zero(eltype(colloid.centers)), zero(eltype(colloid.centers))
+    dist = (zero(eltype(colloid.centers)), zero(eltype(colloid.centers)))
+
+    ineighbor, jneighbor, k = get_neighbor_indices(cell_list, thread, maxcount, i, j)
+    if k <= cell_list.counts[ineighbor, jneighbor]
+        neighbor = cell_list.cells[k, ineighbor, jneighbor]
+        if idx != neighbor
+            definite_overlap, out_of_range, dist, distnorm = _overlap_range(
+                colloid, idx, neighbor)
+            if definite_overlap
+                CUDA.@atomic reject_count[group] += 1
+            elseif !out_of_range
+                passed_circumference_check = true
+                centerangle = (dist[2] < 0 ? -1 : 1) * acos(dist[1] / distnorm)
+            end
+        end
+    end
+    return passed_circumference_check, centerangle, neighbor, dist, distnorm
+end
+
+function constraint_step_one!(colloid::Colloid, constraints::RawConstraints,
+        reject_count::SubArray, idx::Integer, constraint_index::Integer, group::Integer)
+    passed_fast_check = false
+    definite_overlap, out_of_range, dist, distnorm = fastcheck(
+        colloid, idx, constraints, constraint_index)
+    if definite_overlap
+        CUDA.@atomic reject_count[group] += 1 
+    elseif !out_of_range
+        passed_fast_check = true
+    end
+    return passed_fast_check, dist, distnorm
 end

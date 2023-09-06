@@ -35,24 +35,25 @@ function katic_order(colloid::Colloid, cell_list::SeqCellList, k::Integer;
     return orders
 end
 
-function katic_order(colloid::Colloid, cell_list::CuCellList, k::Integer)
+function katic_order(colloid::Colloid, cell_list::CuCellList, k::Integer;
+                     numtype::DataType = Float32)
     blockthreads = (numthreads[1] * numthreads[2])
     maxcount = maximum(cell_list.counts)
     groupcount = 9 * maxcount
     groups_per_block = blockthreads ÷ groupcount
     numblocks = particle_count(colloid) ÷ groups_per_block + 1
-    orders = CuArray(zeros(ComplexF32, particle_count(colloid)))
+    orders = CuArray(zeros(Complex{numtype}, particle_count(colloid)))
     @cuda(threads=blockthreads, blocks=numblocks,
-          shmem = groups_per_block * (2 * groupcount + k) * sizeof(Float32),
+          shmem = groups_per_block * (2 * groupcount + k) * sizeof(numtype),
           katic_order_parallel!(colloid, cell_list, orders, k, maxcount,
-                                groupcount, groups_per_block))
+                                groupcount, groups_per_block, numtype))
     return Vector(orders)
 end
 
 function katic_order_parallel!(colloid::Colloid, cell_list::CuCellList,
         orders::CuDeviceVector, k::Integer, maxcount::Integer,
-        groupcount::Integer, groups_per_block::Integer)
-    shared_memory = CuDynamicSharedArray(Float32, groups_per_block * (2 * groupcount + k))
+        groupcount::Integer, groups_per_block::Integer, numtype::DataType)
+    shared_memory = CuDynamicSharedArray(numtype, groups_per_block * (2 * groupcount + k))
     group_r = @view shared_memory[1:groups_per_block*groupcount]
     group_angle = @view shared_memory[
         groups_per_block*groupcount+1:2*groups_per_block*groupcount]
@@ -68,9 +69,9 @@ function katic_order_parallel!(colloid::Colloid, cell_list::CuCellList,
 
         if particle <= particle_count(colloid)
             i, j = get_cell_list_indices(colloid, cell_list, particle)
-            if thread == 0 && count_neighbors(cell_list, i, j) < k
-                orders[particle] = zero(ComplexF32)
-                is_thread_active = false
+            if thread == 0
+                orders[particle] = zero(eltype(orders))
+                is_thread_active = count_neighbors(cell_list, i, j) >= k
             else
                 calc_neighbor!(colloid, cell_list, group_r, group_angle,
                                particle, i, j, maxcount, thread)
@@ -95,22 +96,18 @@ end
 function calc_neighbor!(colloid::Colloid, cell_list::CuCellList,
         group_r::SubArray, group_angle::SubArray, particle::Integer,
         i::Integer, j::Integer, maxcount::Integer, thread::Integer)
-    relpos, kneighbor = divrem(thread, maxcount)
-    kneighbor += 1
-    jdelta, idelta = divrem(relpos, 3)
-    ineighbor = mod(i + idelta - 2, size(cell_list.cells, 2)) + 1
-    jneighbor = mod(j + jdelta - 2, size(cell_list.cells, 3)) + 1
-
+    ineighbor, jneighbor, kneighbor = get_neighbor_indices(
+        cell_list, thread, maxcount, i, j)
     if kneighbor <= cell_list.counts[ineighbor, jneighbor]
         neighbor = cell_list.cells[kneighbor, ineighbor, jneighbor]
         if particle != neighbor
             group_r[threadIdx().x], group_angle[threadIdx().x] = get_dist_and_angle(
                 colloid, particle, neighbor)
         else
-            group_r[threadIdx().x] = typemax(Float32)
+            group_r[threadIdx().x] = typemax(eltype(group_r))
         end
     else
-        group_r[threadIdx().x] = typemax(Float32)
+        group_r[threadIdx().x] = typemax(eltype(group_r))
     end
     return
 end
@@ -150,7 +147,7 @@ function katic_partition_select!(group_r::SubArray, group_angle::SubArray,
         end
         if is_thread_active && thread == 1
             neighbor_angle[selection] = group_angle[1]
-            group_r[1] = typemax(Float32)
+            group_r[1] = typemax(eltype(group_r))
         end
     end
     return
