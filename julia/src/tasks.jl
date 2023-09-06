@@ -16,37 +16,37 @@ mutable struct TrajectoryRecorder <: AbstractRecorder
     end
 end
 
-struct LocalOrderRecorder{T <: Number} <: AbstractRecorder
+struct LocalParamRecorder{T <: Number} <: AbstractRecorder
     type::String
     typeparams::Tuple{Vararg{<:Real}}
-    orders::Vector{Vector{T}}
+    values::Vector{Vector{T}}
     times::Vector{Int}
     cond::Function
 
-    function LocalOrderRecorder(cond::Function, type::String, typeparams...;
+    function LocalParamRecorder(cond::Function, type::String, typeparams...;
                                 numtype::DataType = Float32)
         if type != "nematic"
             numtype = Complex{numtype}
         end
-        orders = Vector{Vector{numtype}}(undef, 0)
-        new{numtype}(type, typeparams, orders, Int[], cond)
+        values = Vector{Vector{numtype}}(undef, 0)
+        new{numtype}(type, typeparams, values, Int[], cond)
     end
 end
 
-struct GlobalOrderRecorder{T <: Number} <: AbstractRecorder
+struct GlobalParamRecorder{T <: Number} <: AbstractRecorder
     type::String
     typeparams::Tuple{Vararg{<:Real}}
-    orders::Vector{T}
+    values::Vector{T}
     times::Vector{Int}
     cond::Function
 
-    function GlobalOrderRecorder(cond::Function, type::String, typeparams...;
+    function GlobalParamRecorder(cond::Function, type::String, typeparams...;
                                  numtype::DataType = Float32)
         if type != "nematic"
             numtype = Complex{numtype}
         end
-        orders = Vector{numtype}(undef, 0)
-        new{numtype}(type, typeparams, orders, Int[], cond)
+        values = Vector{numtype}(undef, 0)
+        new{numtype}(type, typeparams, values, Int[], cond)
     end
 end
 
