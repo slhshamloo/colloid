@@ -41,4 +41,7 @@ end
     end
 end
 
+@recipe p(snapshot::ColloidSnapshot, colors::Vector{<:AbstractFloat},
+          scheme::ColorScheme = vikO) = (snapshot, [get(scheme, color) for color in colors])
+
 @recipe p(::Type{<:Colloid}, colloid::Colloid) = ColloidSnapshot(colloid)

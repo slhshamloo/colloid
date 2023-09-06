@@ -10,6 +10,7 @@ using Random
 using JLD2
 using RecipesBase
 using Colors: Colorant
+using ColorSchemes: ColorScheme, vikO, get
 import Adapt
 
 const numthreads=(16, 16)
