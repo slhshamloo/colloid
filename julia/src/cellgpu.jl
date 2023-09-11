@@ -98,8 +98,8 @@ function count_overlaps(colloid::Colloid, cell_list::CuCellList)
     overlapcounts = zero(cell_list.counts)
     @cuda(threads=blockthreads, blocks=numblocks,
           shmem = groups_per_block * sizeof(Int32),
-          count_overlaps_parallel(colloid, cell_list, overlapcounts, maxcount,
-                                  groupcount, groups_per_block))
+          count_overlaps_parallel!(colloid, cell_list, overlapcounts, maxcount,
+                                   groupcount, groups_per_block))
     return sum(overlapcounts) ÷ 2
 end
 
@@ -107,7 +107,20 @@ function has_overlap(colloid::Colloid, cell_list::CuCellList)
     return count_overlaps(colloid, cell_list) > 0
 end
 
-function count_overlaps_parallel(colloid::Colloid, cell_list::CuCellList,
+function calculate_potentials!(colloid::Colloid, cell_list::CuCellList,
+        potentials::CuArray, potential::Union{Function, Nothing},
+        pairpotential::Union{Function, Nothing})
+    blockthreads = (numthreads[1] * numthreads[2])
+    maxcount = maximum(cell_list.counts)
+    groupcount = 9 * maxcount
+    groups_per_block = blockthreads ÷ groupcount
+    numblocks = length(cell_list.counts) ÷ groups_per_block + 1
+    @cuda(threads=blockthreads, blocks=numblocks,
+          calculate_potentials_parallel!(colloid, cell_list, potentials,
+          potential, pairpotential, maxcount, groupcount, groups_per_block))
+end
+
+function count_overlaps_parallel!(colloid::Colloid, cell_list::CuCellList,
         overlapcounts::CuDeviceMatrix, maxcount::Integer, groupcount::Integer,
         groups_per_block::Integer)
     group_overlaps = CuDynamicSharedArray(Int32, groups_per_block)
@@ -128,8 +141,8 @@ function count_overlaps_parallel(colloid::Colloid, cell_list::CuCellList,
         i += 1
         j += 1
         if cell <= length(cell_list.counts) && cell_list.counts[i, j] != 0
-            count_neighbor_overlaps(colloid, cell_list, group_overlaps,
-                                    i, j, maxcount, group, thread)
+            count_neighbor_overlaps!(colloid, cell_list, group_overlaps,
+                                     i, j, maxcount, group, thread)
         else
             is_thread_active = false
         end
@@ -142,15 +155,11 @@ function count_overlaps_parallel(colloid::Colloid, cell_list::CuCellList,
     return
 end
 
-function count_neighbor_overlaps(colloid::Colloid, cell_list::CuCellList,
-        group_overlaps::CuDeviceVector, maxcount::Integer, i::Integer, j::Integer,
+function count_neighbor_overlaps!(colloid::Colloid, cell_list::CuCellList,
+        group_overlaps::CuDeviceVector, i::Integer, j::Integer, maxcount::Integer,
         group::Integer, thread::Integer)
-    relpos, kneighbor = divrem(thread, maxcount)
-    kneighbor += 1
-    jdelta, idelta = divrem(relpos, 3)
-    ineighbor = mod(i + idelta - 2, size(cell_list.cells, 2)) + 1
-    jneighbor = mod(j + jdelta - 2, size(cell_list.cells, 3)) + 1
-
+    ineighbor, jneighbor, kneighbor = get_neighbor_indices(
+        cell_list, thread, maxcount, i, j)
     if kneighbor <= cell_list.counts[ineighbor, jneighbor]
         neighbor = cell_list.cells[kneighbor, ineighbor, jneighbor]
         overlap_count = 0
@@ -164,4 +173,61 @@ function count_neighbor_overlaps(colloid::Colloid, cell_list::CuCellList,
         end
         CUDA.@atomic group_overlaps[group] += overlap_count
     end
+end
+
+function calculate_potentials_parallel!(colloid::Colloid, cell_list::CuCellList,
+        potentials::CuDeviceArray, potential::Union{Function, Nothing},
+        pairpotential::Union{Function, Nothing}, maxcount::Integer,
+        groupcount::Integer, groups_per_block::Integer)
+    is_thread_active = threadIdx().x <= groups_per_block * groupcount
+    if is_thread_active
+        group, thread = divrem(threadIdx().x - 1, groupcount)
+        group += 1
+    end
+    CUDA.sync_threads()
+
+    if is_thread_active
+        cell = (blockIdx().x - 1) * groups_per_block + group
+        j, i = divrem(cell - 1, size(cell_list.counts, 1))
+        i += 1
+        j += 1
+        if cell <= length(cell_list.counts) && cell_list.counts[i, j] != 0
+            calculate_neighbor_potentials!(colloid, cell_list, potentials, potential,
+                                           pairpotential, i, j, maxcount, thread)
+        else
+            is_thread_active = false
+        end
+    end
+    return
+end
+
+function calculate_neighbor_potentials!(colloid::Colloid, cell_list::CuCellList,
+        potentials::CuDeviceArray, potential::Union{Function, Nothing},
+        pairpotential::Union{Function, Nothing}, i::Integer, j::Integer,
+        maxcount::Integer, thread::Integer)
+    ineighbor, jneighbor, kneighbor = get_neighbor_indices(
+        cell_list, thread, maxcount, i, j)
+    if kneighbor <= cell_list.counts[ineighbor, jneighbor]
+        neighbor = cell_list.cells[kneighbor, ineighbor, jneighbor]
+        for k in 1:cell_list.counts[i, j]
+            idx = cell_list.cells[k, i, j]
+            if idx != neighbor
+                if !isnothing(pairpotential)
+                    CUDA.@atomic potentials[idx] += pairpotential(colloid, idx, neighbor)
+                end
+            elseif !isnothing(potential)
+                CUDA.@atomic potentials[idx] += potential(colloid, idx)
+            end
+        end
+    end
+end
+
+@inline function get_neighbor_indices(cell_list::CuCellList, thread::Integer,
+        maxcount::Integer, i::Integer, j::Integer)
+    relpos, kneighbor = divrem(thread, maxcount)
+    kneighbor += 1
+    jdelta, idelta = divrem(relpos, 3)
+    ineighbor = mod(i + idelta - 2, size(cell_list.cells, 2)) + 1
+    jneighbor = mod(j + jdelta - 2, size(cell_list.cells, 3)) + 1
+    return ineighbor, jneighbor, kneighbor
 end
