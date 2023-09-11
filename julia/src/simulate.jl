@@ -6,6 +6,7 @@ mutable struct Simulation
 
     move_radius::Real
     rotation_span::Real
+    beta::Real
 
     accepted_translations::Integer
     rejected_translations::Integer
@@ -16,17 +17,18 @@ mutable struct Simulation
     recorders::AbstractVector{<:AbstractRecorder}
     updaters::AbstractVector{<:AbstractUpdater}
 
-    beta::Real
     potential::Union{Function, Nothing}
     pairpotential::Union{Function, Nothing}
+    particle_potentials::Union{AbstractVector{<:Real}, Nothing}
 
     gpu::Bool
     numtype::DataType
+end
 
-    function Simulation(particle_count::Integer, sidenum::Integer, radius::Real,
+function Simulation(particle_count::Integer, sidenum::Integer, radius::Real,
         boxsize::Tuple{<:Real, <:Real}; seed::Integer = -1, gpu::Bool = false,
-        double::Bool = false, beta::Real = 1, potential = nothing,
-        pairpotential = nothing)
+        double::Bool = false, beta::Real = 1, potential::Union{Function, Nothing} = nothing,
+        pairpotential::Union{Function, Nothing} = nothing)
     numtype = double ? Float64 : Float32
     if seed == -1
         seed = rand(0:typemax(UInt))
@@ -38,10 +40,42 @@ mutable struct Simulation
         Random.seed!(seed)
         colloid = Colloid{numtype}(particle_count, sidenum, radius, boxsize)
     end
-    new(colloid, seed, 0, zero(numtype), zero(numtype), 0, 0, 0, 0,
-        AbstractConstraint[], AbstractRecorder[], AbstractUpdater[],
-        convert(numtype, beta), potential, pairpotential, gpu, numtype)
+    if !isnothing(potential) || !isnothing(pairpotential)
+        particle_potentials = zeros(numtype, particle_count(colloid))
+        if gpu
+            particle_potentials = CuArray(particle_potentials)
+        end
+    else
+        particle_potentials = nothing
     end
+    Simulation(colloid, seed, 0, zero(numtype), zero(numtype), convert(numtype, beta),
+        0, 0, 0, 0, AbstractConstraint[], AbstractRecorder[], AbstractUpdater[],
+        potential, pairpotential, particle_potentials, gpu, numtype)
+end
+
+function Simulation(colloid::Colloid; seed::Integer = -1, gpu::Bool = false,
+        double::Bool = false, beta::Real = 1, potential::Union{Function, Nothing} = nothing,
+        pairpotential::Union{Function, Nothing} = nothing)
+    numtype = double ? Float64 : Float32
+    if seed == -1
+        seed = rand(0:typemax(UInt))
+    end
+    if gpu
+        CUDA.seed!(seed)
+    else
+        Random.seed!(seed)
+    end
+    if !isnothing(potential) || !isnothing(pairpotential)
+        particle_potentials = zeros(numtype, particle_count(colloid))
+        if gpu
+            particle_potentials = CuArray(particle_potentials)
+        end
+    else
+        particle_potentials = nothing
+    end
+    Simulation(colloid, seed, 0, zero(numtype), zero(numtype), convert(numtype, beta),
+        0, 0, 0, 0, AbstractConstraint[], AbstractRecorder[], AbstractUpdater[],
+        potential, pairpotential, particle_potentials, gpu, numtype)
 end
 
 function run!(sim::Simulation, timesteps::Integer)
