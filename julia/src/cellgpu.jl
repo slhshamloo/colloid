@@ -5,9 +5,6 @@ struct CuCellList{T<:Real, A<:AbstractArray, M<:AbstractMatrix,
 
     cells::A
     counts::M
-
-    _temp_cells::A
-    _temp_counts::M
 end
 
 function CuCellList(colloid::Colloid, shift::AbstractArray = [0.0f0, 0.0f0];
@@ -21,24 +18,21 @@ function CuCellList(colloid::Colloid, shift::AbstractArray = [0.0f0, 0.0f0];
     cells = Array{Int32, 3}(undef, max_particle_per_cell, m, n)
     counts = zeros(Int32, m, n)
 
-    for idx in 1:particle_count(colloid)
-        i, j = get_cell_list_indices(colloid, (m, n), width, shift, idx)
-        counts[i, j] += 1
-        cells[counts[i, j], i, j] = idx
-    end
-
-    shift = CuVector{eltype(colloid.centers)}(shift)
     cells = CuArray(cells)
     counts = CuArray(counts)
+    @cuda(threads=numthreads, blocks=particle_count(colloid)÷numthreads+1,
+          build_cells_parallel!(colloid, cells, counts, width, shift[1], shift[2]))
+
+    shift = CuVector{eltype(colloid.centers)}(shift)
     CuCellList{eltype(width), typeof(cells), typeof(counts), typeof(shift)}(
-        width, shift, cells, counts, similar(cells), zero(counts))
+        width, shift, cells, counts)
 end
 
 Adapt.@adapt_structure CuCellList
 
 @inline function get_cell_list_indices(colloid::Colloid,
         gridsize::Tuple{<:Integer, <:Integer}, width::Tuple{<:Real, <:Real},
-        shift::AbstractArray, idx::Integer)
+        shift::Union{Tuple{<:Real, <:Real}, AbstractArray{<:Real}}, idx::Integer)
     (mod(floor(Int, (colloid.centers[1, idx] + colloid.boxsize[1] / 2 - shift[1])
         / width[1]), gridsize[1]) + 1,
      mod(floor(Int, (colloid.centers[2, idx] + colloid.boxsize[2] / 2 - shift[2])
@@ -51,43 +45,25 @@ end
                           cell_list.shift, idx)
 end
 
-function shift_cells!(colloid::Colloid, cell_list::CuCellList,
-                      direction::Tuple{<:Integer, <:Integer}, shift::Real)
-    blockthreads = (round(Int, √numthreads), round(Int, √numthreads))
-    cell_list.shift[1] += direction[1] * shift
-    cell_list.shift[2] += direction[2] * shift
-    numblocks = (size(cell_list.cells, 2) ÷ blockthreads[1] + 1,
-                 size(cell_list.cells, 3) ÷ blockthreads[2] + 1)
-    @cuda threads=blockthreads blocks=numblocks shift_cell!(colloid, cell_list, direction)
-    cell_list.cells .= cell_list._temp_cells
-    cell_list.counts .= cell_list._temp_counts
-    cell_list._temp_counts .= 0
-end
-
-function shift_cell!(colloid::Colloid, cell_list::CuCellList,
-                     direction::Tuple{<:Integer, <:Integer})
-    i = (blockIdx().x - 1) * blockDim().x + threadIdx().x
-    j = (blockIdx().y - 1) * blockDim().y + threadIdx().y
-    if i > size(cell_list.cells, 2) || j > size(cell_list.cells, 3)
-        return
+function build_cells_parallel!(colloid::Colloid, cells::CuDeviceArray,
+        counts::CuDeviceArray, width::NTuple{2, <:Real}, xshift::Real, yshift::Real)
+    idx = (blockIdx().x - 1) * blockDim().x + threadIdx().x
+    if idx <= particle_count(colloid)
+        i, j = get_cell_list_indices(colloid, size(counts), width, (xshift, yshift), idx)
+        cellidx = CUDA.@atomic counts[i, j] += 1
+        cells[cellidx + 1, i, j] = idx
     end
-
-    shiftij!(colloid, cell_list, i, j, i, j)
-    i_neighbor = mod(i + direction[1] - 1, size(cell_list.cells, 2)) + 1
-    j_neighbor = mod(j + direction[2] - 1, size(cell_list.cells, 3)) + 1
-    shiftij!(colloid, cell_list, i, j, i_neighbor, j_neighbor)
     return
 end
 
-@inline function shiftij!(colloid::Colloid, cell_list::CuCellList,
-                          i::Integer, j::Integer, ii::Integer, jj::Integer)
-    for k in 1:cell_list.counts[ii, jj]
-        idx = cell_list.cells[k, ii, jj]
-        if (i, j) == get_cell_list_indices(colloid, cell_list, idx)
-            cell_list._temp_counts[i, j] += 1
-            cell_list._temp_cells[cell_list._temp_counts[i, j], i, j] = idx
-        end
-    end
+function shift_cells!(colloid::Colloid, cell_list::CuCellList,
+                      direction::Tuple{<:Integer, <:Integer}, shift::Real)
+    cell_list.shift[1] += direction[1] * shift
+    cell_list.shift[2] += direction[2] * shift
+    cell_list.counts .= 0
+    @cuda(threads=numthreads, blocks=particle_count(colloid)÷numthreads+1,
+          build_cells_parallel!(colloid, cell_list.cells, cell_list.counts,
+                                cell_list.width, cell_list.shift[1], cell_list.shift[2]))
 end
 
 function count_overlaps(colloid::Colloid, cell_list::CuCellList)
