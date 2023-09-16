@@ -31,9 +31,7 @@ function update!(sim::ColloidSim, compressor::ForcefulCompressor, cell_list::Cel
         else
             pos_scale, lxold, lyold = _apply_compression!(sim, compressor)
             if sim.gpu
-                new_cell_list = CuCellList(sim.colloid, cell_list.shift;
-                    maxwidth = 0.8 * (sim.colloid.sidenum <= 4 ?
-                        2 * sim.colloid.radius : 2 * √2 * sim.colloid.radius))
+                new_cell_list = CuCellList(sim.colloid, cell_list.shift)
                 violations = count_violations_gpu(sim.colloid, sim.constraints)
             else
                 new_cell_list = SeqCellList(sim.colloid)
