@@ -1,12 +1,12 @@
-mutable struct ColloidSim
+mutable struct ColloidSim{F<:AbstractFloat}
     colloid::Colloid
 
     seed::Integer
     timestep::Integer
 
-    move_radius::Real
-    rotation_span::Real
-    beta::Real
+    move_radius::F
+    rotation_span::F
+    beta::F
 
     accepted_translations::Integer
     rejected_translations::Integer
@@ -19,7 +19,7 @@ mutable struct ColloidSim
 
     potential::Union{Function, Nothing}
     pairpotential::Union{Function, Nothing}
-    particle_potentials::Union{AbstractVector{<:Real}, Nothing}
+    particle_potentials::AbstractVector{<:Real}
 
     gpu::Bool
     numtype::DataType
@@ -46,11 +46,12 @@ function ColloidSim(particle_count::Integer, sidenum::Integer, radius::Real,
             particle_potentials = CuArray(particle_potentials)
         end
     else
-        particle_potentials = nothing
+        particle_potentials = (gpu ? CuVector{numtype}(undef, 0)
+                                   : Vector{numtype}(undef, 0))
     end
-    ColloidSim(colloid, seed, 0, zero(numtype), zero(numtype), convert(numtype, beta),
-        0, 0, 0, 0, AbstractConstraint[], AbstractRecorder[], AbstractUpdater[],
-        potential, pairpotential, particle_potentials, gpu, numtype)
+    ColloidSim{numtype}(colloid, seed, 0, zero(numtype), zero(numtype),
+        convert(numtype, beta), 0, 0, 0, 0, AbstractConstraint[], AbstractRecorder[],
+        AbstractUpdater[], potential, pairpotential, particle_potentials, gpu, numtype)
 end
 
 function ColloidSim(colloid::Colloid; seed::Integer = -1, gpu::Bool = false,
@@ -71,12 +72,37 @@ function ColloidSim(colloid::Colloid; seed::Integer = -1, gpu::Bool = false,
             particle_potentials = CuArray(particle_potentials)
         end
     else
-        particle_potentials = nothing
+        particle_potentials = (gpu ? CuVector{numtype}(undef, 0)
+                                   : Vector{numtype}(undef, 0))
     end
-    ColloidSim(colloid, seed, 0, zero(numtype), zero(numtype), convert(numtype, beta),
-        0, 0, 0, 0, AbstractConstraint[], AbstractRecorder[], AbstractUpdater[],
-        potential, pairpotential, particle_potentials, gpu, numtype)
+    ColloidSim{numtype}(colloid, seed, 0, zero(numtype), zero(numtype),
+        convert(numtype, beta), 0, 0, 0, 0, AbstractConstraint[], AbstractRecorder[],
+        AbstractUpdater[], potential, pairpotential, particle_potentials, gpu, numtype)
 end
+
+struct CuColloidSim{C<:Colloid, RC<:RawConstraints, F<:AbstractFloat, V<:AbstractVector,
+                    P<:Union{Function, Nothing}, PP<:Union{Function, Nothing}}
+    colloid::C
+    constraints::RC
+
+    move_radius::F
+    rotation_span::F
+    beta::F
+
+    potential::P
+    pairpotential::PP
+    particle_potentials::V
+end
+
+@inline CuColloidSim(colloid::Colloid,
+        constraints::RawConstraints, move_radius::F, rotation_span::F, beta::F,
+        potential::Union{Function, Nothing}, pairpotential::Union{Function, Nothing},
+        particle_potentials::AbstractVector) where {F<:AbstractFloat} =
+    CuColloidSim{typeof(colloid), typeof(constraints), F, typeof(particle_potentials),
+        typeof(potential), typeof(pairpotential)}(colloid, constraints, move_radius,
+        rotation_span, beta, potential, pairpotential, particle_potentials)
+
+Adapt.@adapt_structure CuColloidSim
 
 function run!(sim::ColloidSim, timesteps::Integer)
     (sim.accepted_translations, sim.rejected_translations,
