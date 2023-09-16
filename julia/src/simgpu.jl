@@ -130,8 +130,8 @@ function apply_parallel_trial!(cusim::CuColloidSim, cell_list::CuCellList,
         group_potentials::CuDeviceArray, idx::SubArray, reject_count::SubArray,
         group::Integer, thread::Integer, sweep::Integer, i::Integer, j::Integer,
         is_thread_active::Bool)
-    xprev, yprev = zero(eltype(cusim.colloid.centers)), zero(eltype(cusim.move_radius))
-    angle_change = zero(eltype(cusim.colloid.centers))
+    xprev, yprev = zero(eltype(cusim.colloid.centers)), zero(eltype(cusim.colloid.centers))
+    angle_change = zero(eltype(cusim.colloid.angles))
     if is_thread_active && thread == 0
         group_potentials[group] = zero(eltype(group_potentials))
         idx[group] = cell_list.cells[ceil(Int, randnums[1, i, j, sweep]
@@ -146,7 +146,8 @@ function apply_parallel_trial!(cusim::CuColloidSim, cell_list::CuCellList,
             reject_count[group] = ((i, j) != get_cell_list_indices(
                 cusim.colloid, cell_list, idx[group]))
         else
-            angle_change = cusim.rotation_span * (randnums[2, i, j, sweep] - 0.5)
+            angle_change = convert(eltype(cusim.colloid.angles),
+                cusim.rotation_span * (randnums[2, i, j, sweep] - 0.5))
             cusim.colloid.angles[idx[group]] += angle_change
             reject_count[group] = 0
         end
