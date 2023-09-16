@@ -1,7 +1,5 @@
 function apply_step!(sim::ColloidSim, cell_list::CuCellList)
-    blockthreads = numthreads[1] * numthreads[2]
     sweeps = ceil(Int, mean(cell_list.counts))
-
     randnums = CUDA.rand(sim.numtype, 4, size(cell_list.cells, 2),
                          size(cell_list.cells, 3), sweeps)
     randchoices = CUDA.rand(Bool, size(cell_list.cells, 2),
@@ -12,11 +10,11 @@ function apply_step!(sim::ColloidSim, cell_list::CuCellList)
     for sweep in 1:sweeps
         maxcount = maximum(cell_list.counts)
         groupcount = 9 * maxcount + length(sim.constraints)
-        groups_per_block = blockthreads ÷ groupcount
+        groups_per_block = numthreads ÷ groupcount
         for color in shuffle(1:4)
             cellcount = getcellcount(cell_list, color)
             numblocks = cellcount ÷ groups_per_block + 1
-            @cuda(threads=blockthreads, blocks=numblocks,
+            @cuda(threads=numthreads, blocks=numblocks,
                   shmem = groups_per_block * (sizeof(Int32) + sizeof(sim.numtype)),
                   apply_parallel_step!(cusim, cell_list, randnums, randchoices, accept,
                                        color, sweep, maxcount, groupcount, cellcount))

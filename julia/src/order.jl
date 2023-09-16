@@ -37,13 +37,12 @@ end
 
 function katic_order(colloid::Colloid, cell_list::CuCellList, k::Integer;
                      numtype::DataType = Float32)
-    blockthreads = (numthreads[1] * numthreads[2])
     maxcount = maximum(cell_list.counts)
     groupcount = 9 * maxcount
-    groups_per_block = blockthreads ÷ groupcount
+    groups_per_block = numthreads ÷ groupcount
     numblocks = particle_count(colloid) ÷ groups_per_block + 1
     orders = CuArray(zeros(Complex{numtype}, particle_count(colloid)))
-    @cuda(threads=blockthreads, blocks=numblocks,
+    @cuda(threads=numthreads, blocks=numblocks,
           shmem = groups_per_block * (2 * groupcount + k) * sizeof(numtype),
           katic_order_parallel!(colloid, cell_list, orders, k, maxcount,
                                 groupcount, groups_per_block, numtype))

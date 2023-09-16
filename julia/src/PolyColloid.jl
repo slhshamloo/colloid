@@ -13,7 +13,7 @@ using Colors: Colorant
 using ColorSchemes: ColorScheme, vikO, get
 import Adapt
 
-const numthreads=(16, 16)
+const numthreads=256
 
 include("colloid.jl")
 include("overlap.jl")

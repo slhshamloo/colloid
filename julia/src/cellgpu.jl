@@ -53,11 +53,12 @@ end
 
 function shift_cells!(colloid::Colloid, cell_list::CuCellList,
                       direction::Tuple{<:Integer, <:Integer}, shift::Real)
+    blockthreads = (round(Int, √numthreads), round(Int, √numthreads))
     cell_list.shift[1] += direction[1] * shift
     cell_list.shift[2] += direction[2] * shift
-    numblocks = (size(cell_list.cells, 2) ÷ numthreads[1] + 1,
-                 size(cell_list.cells, 3) ÷ numthreads[2] + 1)
-    @cuda threads=numthreads blocks=numblocks shift_cell!(colloid, cell_list, direction)
+    numblocks = (size(cell_list.cells, 2) ÷ blockthreads[1] + 1,
+                 size(cell_list.cells, 3) ÷ blockthreads[2] + 1)
+    @cuda threads=blockthreads blocks=numblocks shift_cell!(colloid, cell_list, direction)
     cell_list.cells .= cell_list._temp_cells
     cell_list.counts .= cell_list._temp_counts
     cell_list._temp_counts .= 0
@@ -90,13 +91,12 @@ end
 end
 
 function count_overlaps(colloid::Colloid, cell_list::CuCellList)
-    blockthreads = (numthreads[1] * numthreads[2])
     maxcount = maximum(cell_list.counts)
     groupcount = 9 * maxcount
-    groups_per_block = blockthreads ÷ groupcount
+    groups_per_block = numthreads ÷ groupcount
     numblocks = length(cell_list.counts) ÷ groups_per_block + 1
     overlapcounts = zero(cell_list.counts)
-    @cuda(threads=blockthreads, blocks=numblocks,
+    @cuda(threads=numthreads, blocks=numblocks,
           shmem = groups_per_block * sizeof(Int32),
           count_overlaps_parallel!(colloid, cell_list, overlapcounts, maxcount,
                                    groupcount, groups_per_block))
@@ -110,12 +110,11 @@ end
 function calculate_potentials!(colloid::Colloid, cell_list::CuCellList,
         potentials::CuArray, potential::Union{Function, Nothing},
         pairpotential::Union{Function, Nothing})
-    blockthreads = (numthreads[1] * numthreads[2])
     maxcount = maximum(cell_list.counts)
     groupcount = 9 * maxcount
-    groups_per_block = blockthreads ÷ groupcount
+    groups_per_block = numthreads ÷ groupcount
     numblocks = length(cell_list.counts) ÷ groups_per_block + 1
-    @cuda(threads=blockthreads, blocks=numblocks,
+    @cuda(threads=numthreads, blocks=numblocks,
           calculate_potentials_parallel!(colloid, cell_list, potentials,
           potential, pairpotential, maxcount, groupcount, groups_per_block))
 end

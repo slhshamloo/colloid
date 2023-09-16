@@ -84,11 +84,10 @@ end
 
 function count_violations_gpu(colloid::Colloid,
         constraints::AbstractVector{<:AbstractConstraint})
-    blockthreads = (numthreads[1] * numthreads[2])
-    numblocks = particle_count(colloid) ÷ blockthreads + 1
+    numblocks = particle_count(colloid) ÷ numthreads + 1
     raw_constraints = build_raw_constraints(constraints, eltype(colloid.centers))
     violation_counts = CuArray(zeros(Int32, numblocks))
-    @cuda(threads=blockthreads, blocks=numblocks, shmem = blockthreads * sizeof(Int32),
+    @cuda(threads=numthreads, blocks=numblocks, shmem = numthreads * sizeof(Int32),
           count_violations_parallel(colloid, raw_constraints, violation_counts))
     return sum(violation_counts)
 end
