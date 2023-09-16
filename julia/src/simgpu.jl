@@ -99,9 +99,11 @@ function apply_parallel_move!(cusim::CuColloidSim, cell_list::CuCellList,
         idx::SubArray, reject_count::SubArray, group_potentials::CuDeviceArray,
         groupcount::Integer, maxcount::Integer, group::Integer, thread::Integer,
         sweep::Integer, i::Integer, j::Integer, is_thread_active::Bool)
-    xprev, yprev, angle_change = apply_parallel_trial!(
-        cusim, cell_list, randnums, randchoices, group_potentials, idx, reject_count,
-        group, thread, sweep, i, j, is_thread_active)
+    if is_thread_active && thread == 0
+        xprev, yprev, angle_change = apply_parallel_trial!(
+            cusim, cell_list, randnums, randchoices, group_potentials,
+            idx, reject_count, group, sweep, i, j)
+    end
     CUDA.sync_threads()
 
     if isnothing(cusim.pairpotential)
@@ -128,29 +130,26 @@ end
 function apply_parallel_trial!(cusim::CuColloidSim, cell_list::CuCellList,
         randnums::CuDeviceArray, randchoices::CuDeviceArray,
         group_potentials::CuDeviceArray, idx::SubArray, reject_count::SubArray,
-        group::Integer, thread::Integer, sweep::Integer, i::Integer, j::Integer,
-        is_thread_active::Bool)
+        group::Integer, sweep::Integer, i::Integer, j::Integer)
     xprev, yprev = zero(eltype(cusim.colloid.centers)), zero(eltype(cusim.colloid.centers))
     angle_change = zero(eltype(cusim.colloid.angles))
-    if is_thread_active && thread == 0
-        group_potentials[group] = zero(eltype(group_potentials))
-        idx[group] = cell_list.cells[ceil(Int, randnums[1, i, j, sweep]
-                                     * cell_list.counts[i, j]), i, j]
-        if randchoices[i, j, sweep]
-            xprev = cusim.colloid.centers[1, idx[group]]
-            yprev = cusim.colloid.centers[2, idx[group]]
-            r = cusim.move_radius * randnums[2, i, j, sweep]
-            θ = 2π * randnums[3, i, j, sweep]
-            x, y = r * cos(θ), r * sin(θ)
-            move!(cusim.colloid, idx[group], x, y)
-            reject_count[group] = ((i, j) != get_cell_list_indices(
-                cusim.colloid, cell_list, idx[group]))
-        else
-            angle_change = convert(eltype(cusim.colloid.angles),
-                cusim.rotation_span * (randnums[2, i, j, sweep] - 0.5))
-            cusim.colloid.angles[idx[group]] += angle_change
-            reject_count[group] = 0
-        end
+    group_potentials[group] = zero(eltype(group_potentials))
+    idx[group] = cell_list.cells[ceil(Int, randnums[1, i, j, sweep]
+                                    * cell_list.counts[i, j]), i, j]
+    if randchoices[i, j, sweep]
+        xprev = cusim.colloid.centers[1, idx[group]]
+        yprev = cusim.colloid.centers[2, idx[group]]
+        r = cusim.move_radius * randnums[2, i, j, sweep]
+        θ = 2π * randnums[3, i, j, sweep]
+        x, y = r * cos(θ), r * sin(θ)
+        move!(cusim.colloid, idx[group], x, y)
+        reject_count[group] = ((i, j) != get_cell_list_indices(
+            cusim.colloid, cell_list, idx[group]))
+    else
+        angle_change = convert(eltype(cusim.colloid.angles),
+            cusim.rotation_span * (randnums[2, i, j, sweep] - 0.5))
+        cusim.colloid.angles[idx[group]] += angle_change
+        reject_count[group] = 0
     end
     return xprev, yprev, angle_change
 end
