@@ -1,4 +1,4 @@
-function update!(sim::Simulation, tuner::MoveSizeTuner, cell_list::CellList)
+function update!(sim::ColloidSim, tuner::MoveSizeTuner, cell_list::CellList)
     if tuner.cond(sim.timestep)
         translation_acceptance, rotation_acceptance = _get_new_acceptance_rates(sim, tuner)
         _set_tuner_flags!(tuner, translation_acceptance, rotation_acceptance)
@@ -16,7 +16,7 @@ function update!(sim::Simulation, tuner::MoveSizeTuner, cell_list::CellList)
     return cell_list
 end
 
-function update!(sim::Simulation, compressor::ForcefulCompressor, cell_list::CellList)
+function update!(sim::ColloidSim, compressor::ForcefulCompressor, cell_list::CellList)
     if _needs_compression(sim, compressor, cell_list)
         if compressor.reached_target
             if sim.gpu
@@ -55,7 +55,7 @@ function update!(sim::Simulation, compressor::ForcefulCompressor, cell_list::Cel
     return cell_list
 end
 
-@inline function _get_new_acceptance_rates(sim::Simulation, tuner::MoveSizeTuner)
+@inline function _get_new_acceptance_rates(sim::ColloidSim, tuner::MoveSizeTuner)
     acc_trans = sim.accepted_translations - tuner.prev_accepted_translations
     rej_trans = sim.rejected_translations - tuner.prev_rejected_translations
     acc_rot = sim.accepted_rotations - tuner.prev_accepted_rotations
@@ -81,14 +81,14 @@ end
     end
 end
 
-@inline function _set_tuner_prev_values!(sim::Simulation, tuner::MoveSizeTuner)
+@inline function _set_tuner_prev_values!(sim::ColloidSim, tuner::MoveSizeTuner)
     tuner.prev_accepted_translations = sim.accepted_translations
     tuner.prev_rejected_translations = sim.rejected_translations
     tuner.prev_accepted_rotations = sim.accepted_rotations
     tuner.prev_rejected_rotations = sim.rejected_rotations
 end
 
-@inline function _get_force_compress_dims(sim::Simulation, compressor::ForcefulCompressor)
+@inline function _get_force_compress_dims(sim::ColloidSim, compressor::ForcefulCompressor)
     scale_factor = max(compressor.minscale,
         1.0 - sim.move_radius / (2 * sim.colloid.radius))
 
@@ -107,7 +107,7 @@ end
     return lxnew, lynew
 end
 
-@inline function _needs_compression(sim::Simulation, compressor::ForcefulCompressor,
+@inline function _needs_compression(sim::ColloidSim, compressor::ForcefulCompressor,
                                    cell_list::CellList)
     return (!compressor.completed && compressor.cond(sim.timestep)
         && !has_overlap(sim.colloid, cell_list)
@@ -115,7 +115,7 @@ end
             || (sim.gpu && count_violations_gpu(sim.colloid, sim.constraints) == 0)))
 end
 
-@inline function _apply_compression!(sim::Simulation, compressor::ForcefulCompressor)
+@inline function _apply_compression!(sim::ColloidSim, compressor::ForcefulCompressor)
     lxnew, lynew = _get_force_compress_dims(sim, compressor)
     lxold, lyold = sim.colloid.boxsize
     

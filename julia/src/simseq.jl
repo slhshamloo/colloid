@@ -1,4 +1,4 @@
-function apply_step!(sim::Simulation, cell_list::SeqCellList)
+function apply_step!(sim::ColloidSim, cell_list::SeqCellList)
     randchoices = rand(Bool, particle_count(sim.colloid))
     randnums = rand(sim.numtype, 2, particle_count(sim.colloid))
     iter = (rand(Bool) ?
@@ -15,7 +15,7 @@ function apply_step!(sim::Simulation, cell_list::SeqCellList)
     return true
 end
 
-function apply_translation!(sim::Simulation, cell_list::SeqCellList,
+function apply_translation!(sim::ColloidSim, cell_list::SeqCellList,
                             randnums::Matrix{<:Real}, idx::Int)
     r = sim.move_radius * randnums[1, idx]
     θ = 2π * randnums[2, idx]
@@ -38,7 +38,7 @@ function apply_translation!(sim::Simulation, cell_list::SeqCellList,
     end
 end
 
-function apply_rotation!(sim::Simulation, cell_list::SeqCellList,
+function apply_rotation!(sim::ColloidSim, cell_list::SeqCellList,
                          randnums::Matrix{<:Real}, idx::Int)
     angle_change = sim.rotation_span * (randnums[2, idx] - 0.5)
     sim.colloid.angles[idx] += angle_change
@@ -51,7 +51,7 @@ function apply_rotation!(sim::Simulation, cell_list::SeqCellList,
     end
 end
 
-@inline function violates_constraints(sim::Simulation, idx::Integer)
+@inline function violates_constraints(sim::ColloidSim, idx::Integer)
     for constraint in sim.constraints
         if is_violated(sim.colloid, constraint, idx)
             return true

@@ -1,4 +1,4 @@
-function apply_step!(sim::Simulation, cell_list::CuCellList)
+function apply_step!(sim::ColloidSim, cell_list::CuCellList)
     blockthreads = numthreads[1] * numthreads[2]
     sweeps = ceil(Int, mean(cell_list.counts))
 
@@ -45,7 +45,7 @@ end
     (size(cell_list.cells, 2) ÷ 2 + (color % 2) * (size(cell_list.cells, 2) % 2))
     * (size(cell_list.cells, 3) ÷ 2 + (color ÷ 3) * (size(cell_list.cells, 3) % 2)))
 
-function count_accepted_and_rejected_moves!(sim::Simulation, accept::CuArray)
+function count_accepted_and_rejected_moves!(sim::ColloidSim, accept::CuArray)
     accept = Vector(accept)
     sim.accepted_translations += accept[1]
     sim.rejected_translations += accept[2]

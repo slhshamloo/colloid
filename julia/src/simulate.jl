@@ -1,4 +1,4 @@
-mutable struct Simulation
+mutable struct ColloidSim
     colloid::Colloid
 
     seed::Integer
@@ -25,7 +25,7 @@ mutable struct Simulation
     numtype::DataType
 end
 
-function Simulation(particle_count::Integer, sidenum::Integer, radius::Real,
+function ColloidSim(particle_count::Integer, sidenum::Integer, radius::Real,
         boxsize::Tuple{<:Real, <:Real}; seed::Integer = -1, gpu::Bool = false,
         double::Bool = false, beta::Real = 1, potential::Union{Function, Nothing} = nothing,
         pairpotential::Union{Function, Nothing} = nothing)
@@ -48,12 +48,12 @@ function Simulation(particle_count::Integer, sidenum::Integer, radius::Real,
     else
         particle_potentials = nothing
     end
-    Simulation(colloid, seed, 0, zero(numtype), zero(numtype), convert(numtype, beta),
+    ColloidSim(colloid, seed, 0, zero(numtype), zero(numtype), convert(numtype, beta),
         0, 0, 0, 0, AbstractConstraint[], AbstractRecorder[], AbstractUpdater[],
         potential, pairpotential, particle_potentials, gpu, numtype)
 end
 
-function Simulation(colloid::Colloid; seed::Integer = -1, gpu::Bool = false,
+function ColloidSim(colloid::Colloid; seed::Integer = -1, gpu::Bool = false,
         double::Bool = false, beta::Real = 1, potential::Union{Function, Nothing} = nothing,
         pairpotential::Union{Function, Nothing} = nothing)
     numtype = double ? Float64 : Float32
@@ -73,12 +73,12 @@ function Simulation(colloid::Colloid; seed::Integer = -1, gpu::Bool = false,
     else
         particle_potentials = nothing
     end
-    Simulation(colloid, seed, 0, zero(numtype), zero(numtype), convert(numtype, beta),
+    ColloidSim(colloid, seed, 0, zero(numtype), zero(numtype), convert(numtype, beta),
         0, 0, 0, 0, AbstractConstraint[], AbstractRecorder[], AbstractUpdater[],
         potential, pairpotential, particle_potentials, gpu, numtype)
 end
 
-function run!(sim::Simulation, timesteps::Integer)
+function run!(sim::ColloidSim, timesteps::Integer)
     (sim.accepted_translations, sim.rejected_translations,
         sim.accepted_rotations, sim.rejected_rotations) = (0, 0, 0, 0)
     if sim.gpu

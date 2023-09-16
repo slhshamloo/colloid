@@ -1,4 +1,4 @@
-function record!(sim::Simulation, recorder::TrajectoryRecorder, cell_list::CellList)
+function record!(sim::ColloidSim, recorder::TrajectoryRecorder, cell_list::CellList)
     if recorder.cond(sim.timestep)
         if recorder.savetomem
             if isnothing(recorder.trajectory)
@@ -50,7 +50,7 @@ function recordfile!(sim, recorder)
     end
 end
 
-function record!(sim::Simulation, recorder::LocalParamRecorder, cell_list::CellList)
+function record!(sim::ColloidSim, recorder::LocalParamRecorder, cell_list::CellList)
     if recorder.cond(sim.timestep)
         if recorder.type == "katic"
             if eltype(eltype(recorder.values)) <: Complex
@@ -63,7 +63,7 @@ function record!(sim::Simulation, recorder::LocalParamRecorder, cell_list::CellL
     end
 end
 
-function record!(sim::Simulation, recorder::GlobalParamRecorder, cell_list::CellList)
+function record!(sim::ColloidSim, recorder::GlobalParamRecorder, cell_list::CellList)
     if recorder.cond(sim.timestep)
         if recorder.type == "orient"
             push!(recorder.values, mean(

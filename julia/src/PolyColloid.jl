@@ -1,6 +1,6 @@
 module PolyColloid
 
-export Simulation, ForcefulCompressor, MoveSizeTuner, TrajectoryRecorder,
+export ColloidSim, ForcefulCompressor, MoveSizeTuner, TrajectoryRecorder,
     run!, build_configuration!, crystallize!, particle_count, particle_area, boxarea
 
 using CUDA
