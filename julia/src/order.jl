@@ -52,31 +52,26 @@ end
 function katic_order_parallel!(colloid::Colloid, cell_list::CuCellList,
         orders::CuDeviceVector, k::Integer, maxcount::Integer,
         groupcount::Integer, groups_per_block::Integer, numtype::DataType)
+    active_threads = groups_per_block * groupcount
     shared_memory = CuDynamicSharedArray(numtype, groups_per_block * (2 * groupcount + k))
-    group_r = @view shared_memory[1:groups_per_block*groupcount]
+    group_r = @view shared_memory[1:active_threads]
     group_angle = @view shared_memory[
-        groups_per_block*groupcount+1:2*groups_per_block*groupcount]
-    neighbor_angle = @view shared_memory[2*groups_per_block*groupcount+1:end]
+        active_threads+1:2*active_threads]
+    neighbor_angle = @view shared_memory[2*active_threads+1:end]
 
-    is_thread_active = threadIdx().x <= groups_per_block * groupcount
+    is_thread_active = threadIdx().x <= active_threads
     group, thread = divrem(threadIdx().x - 1, groupcount)
     group += 1
     if is_thread_active
-        group, thread = divrem(threadIdx().x - 1, groupcount)
-        group += 1
         particle = (blockIdx().x - 1) * groups_per_block + group
-
-        if particle <= particle_count(colloid)
+        is_thread_active = particle <= particle_count(colloid)
+        if is_thread_active
             i, j = get_cell_list_indices(colloid, cell_list, particle)
-            if thread == 0
-                orders[particle] = zero(eltype(orders))
-                is_thread_active = count_neighbors(cell_list, i, j) >= k
-            else
+            is_thread_active = count_neighbors(cell_list, i, j) >= k
+            if is_thread_active
                 calc_neighbor!(colloid, cell_list, group_r, group_angle,
                                particle, i, j, maxcount, thread)
             end
-        else
-            is_thread_active = false
         end
     end
     CUDA.sync_threads()
@@ -144,7 +139,7 @@ function katic_partition_select!(group_r::SubArray, group_angle::SubArray,
             step *= 2
             CUDA.sync_threads()
         end
-        if is_thread_active && thread == 1
+        if is_thread_active && isone(thread)
             neighbor_angle[selection] = group_angle[1]
             group_r[1] = typemax(eltype(group_r))
         end
