@@ -1,1 +1,2 @@
-/julia/*.ipynb linguist-detectable=false
+/julia/*.ipynb linguist-language=julia
+/hoomd/*.ipynb linguist-language=python
