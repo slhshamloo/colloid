@@ -1,6 +1,13 @@
 function apply_step!(sim::ColloidSim, cell_list::SeqCellList)
     randchoices = rand(Bool, particle_count(sim.colloid))
-    randnums = rand(sim.numtype, 2, particle_count(sim.colloid))
+    randnums = rand(sim.numtype,
+        2 + !isnothing(sim.potential) || !isnothing(sim.pairpotential),
+        particle_count(sim.colloid))
+    if !isnothing(sim.potential) || !isnothing(sim.pairpotential)
+        calculate_potentials!(sim.colloid, cell_list, sim.potential,
+                              sim.pairpotential, sim.particle_potentials)
+    end
+    
     iter = (rand(Bool) ?
         range(1, particle_count(sim.colloid))
         : range(particle_count(sim.colloid), 1, step=-1)
@@ -27,7 +34,7 @@ function apply_translation!(sim::ColloidSim, cell_list::SeqCellList,
     i, j = get_cell_list_indices(sim.colloid, cell_list, idx)
     push!(cell_list.cells[i, j], idx)
 
-    if violates_constraints(sim, idx) || has_overlap(sim.colloid, cell_list, idx, i, j)
+    if has_violation(sim, cell_list, randnums, idx, i, j)
         move!(sim.colloid, idx, -x, -y)
         pop!(cell_list.cells[i, j])
         i, j = get_cell_list_indices(sim.colloid, cell_list, idx)
@@ -43,11 +50,31 @@ function apply_rotation!(sim::ColloidSim, cell_list::SeqCellList,
     angle_change = sim.rotation_span * (randnums[2, idx] - 0.5)
     sim.colloid.angles[idx] += angle_change
     i, j = get_cell_list_indices(sim.colloid, cell_list, idx)
-    if has_overlap(sim.colloid, cell_list, idx, i, j)
+    if has_violation(sim, cell_list, randnums, idx, i, j)
         sim.colloid.angles[idx] -= angle_change
         sim.rejected_rotations += 1
     else
         sim.accepted_rotations += 1
+    end
+end
+
+@inline function has_violation(sim::ColloidSim, cell_list::SeqCellList,
+        randnums::Matrix{<:Real}, idx::Integer, i::Integer, j::Integer)
+    if !isnothing(sim.potential) || !isnothing(sim.pairpotential)
+        potsum = zero(sim.particle_potentials)
+        if !isnothing(sim.pairpotential)
+            potsum += pairpotential_sum(
+                sim.colloid, cell_list, sim.pairpotential, idx, i, j)
+        end
+        if !isnothing(sim.potential)
+            potsum += sim.potential(sim.colloid, idx)
+        end
+        potchange = potsum - sim.particle_potentials[idx]
+        return (violates_constraints(sim, idx)
+            || randnums[3, idx] > exp(-sim.beta * potchange))
+    else
+        return (violates_constraints(sim, idx)
+            || has_overlap(sim.colloid, cell_list, idx, i, j))
     end
 end
 

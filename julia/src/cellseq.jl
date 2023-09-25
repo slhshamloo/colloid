@@ -171,3 +171,94 @@ end
     end
     return count
 end
+
+function calculate_potentials!(colloid::Colloid, cell_list::SeqCellList,
+        potential::Union{Nothing, Function}, pairpotential::Union{Nothing, Function},
+        particle_potentials::Vector{<:Real})
+    if !isnothing(potential)
+        map!(idx -> potential(colloid, idx), particle_potentials, 1:particle_count(colloid))
+    else
+        particle_potentials .= 0
+    end
+    if !isnothing(pairpotential)
+        calculate_pairpotentials!(colloid, cell_list, pairpotential, particle_potentials)
+    end
+end
+
+function calculate_pairpotentials!(colloid::Colloid, cell_list::SeqCellList,
+        pairpotential::Function, particle_potentials::Vector{<:Real})
+    for cell in CartesianIndices(cell_list.cells)
+        i, j = Tuple(cell)
+        for m in eachindex(cell_list.cells[cell])
+            idx = cell_list.cells[cell][m]
+            if (i + j) % 2 == 0
+                overlap_count += calculate_orthogonal_pairpotentials!(
+                    colloid, cell_list, pairpotential, particle_potentials, i, j, idx)
+            end
+            if i % 2 == 0
+                overlap_count += calculate_diagonal_pairpotentials!(
+                    colloid, cell_list, pairpotential, particle_potentials, i, j, idx)
+            end
+        end
+    end
+end
+
+@inline function calculate_orthogonal_pairpotentials!(
+        colloid::Colloid, cell_list::SeqCellList, pairpotential::Function,
+        particle_potentials::Vector{<:Real}, i::Integer, j::Integer, m::Integer)
+    lx, ly = size(cell_list.cells)
+    for n in cell_list.cells[(i == 1 ? lx : i - 1), j]
+        particle_potentials[m] += pairpotential(colloid, m, n)
+    end
+    for n in cell_list.cells[i, (j == 1 ? ly : j - 1)]
+        particle_potentials[m] += pairpotential(colloid, m, n)
+    end
+    for n in cell_list.cells[(i == lx ? 1 : i + 1), j]
+        particle_potentials[m] += pairpotential(colloid, m, n)
+    end
+    for n in cell_list.cells[i, (j == ly ? 1 : j + 1)]
+        particle_potentials[m] += pairpotential(colloid, m, n)
+    end
+end
+
+@inline function calculate_diagonal_pairpotentials!(
+        colloid::Colloid, cell_list::SeqCellList, pairpotential::Function,
+        particle_potentials::Vector{<:Real}, i::Integer, j::Integer, m::Integer)
+    lx, ly = size(cell_list.cells)
+    for n in cell_list.cells[(i == 1 ? lx : i - 1), (j == 1 ? ly : j - 1)]
+        particle_potentials[m] += pairpotential(colloid, m, n)
+    end
+    for n in cell_list.cells[(i == lx ? 1 : i + 1), (j == 1 ? ly : j - 1)]
+        particle_potentials[m] += pairpotential(colloid, m, n)
+    end
+    for n in cell_list.cells[(i == lx ? 1 : i + 1), (j == ly ? 1 : j + 1)]
+        particle_potentials[m] += pairpotential(colloid, m, n)
+    end
+    for n in cell_list.cells[(i == 1 ? lx : i - 1), (j == ly ? 1 : j + 1)]
+        particle_potentials[m] += pairpotential(colloid, m, n)
+    end
+end
+
+@inline function pairpotential_sum(colloid::Colloid, cell_list::SeqCellList,
+        pairpotential::Function, idx::Integer, i::Integer, j::Integer)
+    potsum = zero(colloid.centers)
+    for neighbor_cell in (
+            cell_list.cells[mod(i - 2, size(cell_list.counts, 1)) + 1,
+                            mod(j - 2, size(cell_list.counts, 2)) + 1],
+            cell_list.cells[mod(i - 2, size(cell_list.counts, 1)) + 1, j],
+            cell_list.cells[mod(i - 2, size(cell_list.counts, 1)) + 1,
+                            mod(j, size(cell_list.counts, 1)) + 1],
+            cell_list.cells[i, mod(j - 2, size(cell_list.counts, 1)) + 1],
+            cell_list.cells[i, j] - 1,
+            cell_list.cells[i, mod(j, size(cell_list.counts, 1)) + 1],
+            cell_list.cells[mod(i, size(cell_list.counts, 1)) + 1,
+                            mod(j - 2, size(cell_list.counts, 2)) + 1],
+            cell_list.cells[mod(i, size(cell_list.counts, 1)) + 1, j],
+            cell_list.cells[mod(i, size(cell_list.counts, 1)) + 1,
+                            mod(j, size(cell_list.counts, 1)) + 1])
+        for neighbor in neighbor_cell
+            potsum += pairpotential(colloid, idx, neighbor)
+        end
+    end
+    return potsum
+end
