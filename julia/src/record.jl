@@ -16,39 +16,48 @@ function record!(sim::ColloidSim, recorder::TrajectoryRecorder,
             push!(recorder.trajectory.times, sim.timestep)
         end
         if !isnothing(recorder.filepath)
-            recordfile!(sim, recorder)
+            Threads.@spawn recordfile!(sim, recorder, Array(sim.colloid.centers),
+                Array(sim.colloid.angles), Array(sim.colloid.boxsize))
         end
     end
 end
 
-function recordfile!(sim, recorder)
-    jldopen(recorder.filepath, "a+") do f
-        if recorder.filecounter == 0
-            f["sidenum"] = sim.colloid.sidenum
-            f["radius"] = sim.colloid.radius
+function recordfile!(sim::ColloidSim, recorder::TrajectoryRecorder,
+        centers::Matrix{<:Real}, angles::Vector{<:Real}, boxsize::Vector{<:Real})
+    frame = Threads.@atomic recorder.filecounter += 1
+    if frame == 1
+        mkdir(recorder.filepath)
+        jldopen(recorder.filepath * "/constants.jld2", "a+") do file
+            file["seed"] = sim.seed
+            file["sidenum"] = sim.colloid.sidenum
+            file["radius"] = sim.colloid.radius
         end
-        recorder.filecounter += 1
-        f["frame$(recorder.filecounter)/time"] = sim.timestep
-        f["frame$(recorder.filecounter)/centers"] = Array(sim.colloid.centers)
-        f["frame$(recorder.filecounter)/angles"] = Array(sim.colloid.angles)
-        f["frame$(recorder.filecounter)/boxsize"] = Array(sim.colloid.boxsize)
     end
-    if recorder.safe
-        if recorder.filecounter == 1
-            mkdir(recorder.filepath[1:end-5] * "/")
-            jldopen(recorder.filepath[1:end-5] * "/constants.jld2", "a+") do f
-                f["sidenum"] = sim.colloid.sidenum
-                f["radius"] = sim.colloid.radius
+    jldopen(recorder.filepath * "/$frame.jld2", "a+") do file
+        file["time"] = sim.timestep
+        file["centers"] = Array(sim.colloid.centers)
+        file["angles"] = Array(sim.colloid.angles)
+        file["boxsize"] = Array(sim.colloid.boxsize)
+    end
+end
+
+function finalize!(recorder::TrajectoryRecorder)
+    jldopen(recorder.filepath * ".jld2", "w+") do masterfile
+        jldopen(recorder.filepath * "/constants.jld") do constfile
+            masterfile["seed"] = constfile["seed"]
+            masterfile["sidenum"] = constfile["seed"]
+            masterfile["radius"] = constfile["seed"]
+        end
+        for frame in 1:recorder.filecounter
+            jldopen(recorder.filepath * ".jld2/$frame.jld") do framefile
+                masterfile["frame$frame/time"] = framefile["time"]
+                masterfile["frame$frame/centers"] = framefile["centers"]
+                masterfile["frame$frame/angles"] = framefile["angles"]
+                masterfile["frame$frame/boxsize"] = framefile["boxsize"]
             end
         end
-        jldopen(recorder.filepath[1:end-5]
-                * "/$(recorder.filecounter).jld2", "a+") do f
-            f["time"] = sim.timestep
-            f["centers"] = Array(sim.colloid.centers)
-            f["angles"] = Array(sim.colloid.angles)
-            f["boxsize"] = Array(sim.colloid.boxsize)
-        end
     end
+    rm(recorder.filepath, recursive=true)
 end
 
 function record!(sim::ColloidSim, recorder::LocalParamRecorder, cell_list::CellList)

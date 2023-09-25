@@ -6,13 +6,11 @@ mutable struct TrajectoryRecorder <: AbstractRecorder
     filecounter::Integer
     trajectory::Union{ColloidTrajectory, Nothing}
     savetomem::Bool
-    safe::Bool
     cond::Function
 
-    function TrajectoryRecorder(cond::Function;
-            filepath::Union{String, Nothing} = nothing,
-            savetomem::Bool = false, safe::Bool = false)
-        new(filepath, 0, nothing, savetomem, safe, cond)
+    function TrajectoryRecorder(cond::Function,
+            filepath::Union{String, Nothing} = nothing, savetomem::Bool = false)
+        new(filepath, 0, nothing, savetomem, cond)
     end
 end
 
