@@ -1,4 +1,5 @@
-function update!(sim::ColloidSim, tuner::MoveSizeTuner, cell_list::CellList)
+function update!(sim::ColloidSim, tuner::MoveSizeTuner,
+                 cell_list::Union{Nothing, CellList} = nothing)
     if tuner.cond(sim.timestep)
         translation_acceptance, rotation_acceptance = _get_new_acceptance_rates(sim, tuner)
         _set_tuner_flags!(tuner, translation_acceptance, rotation_acceptance)

@@ -1,4 +1,5 @@
-function record!(sim::ColloidSim, recorder::TrajectoryRecorder, cell_list::CellList)
+function record!(sim::ColloidSim, recorder::TrajectoryRecorder,
+                 cell_list::Union{Nothing, CellList} = nothing)
     if recorder.cond(sim.timestep)
         if recorder.savetomem
             if isnothing(recorder.trajectory)
@@ -63,7 +64,8 @@ function record!(sim::ColloidSim, recorder::LocalParamRecorder, cell_list::CellL
     end
 end
 
-function record!(sim::ColloidSim, recorder::GlobalParamRecorder, cell_list::CellList)
+function record!(sim::ColloidSim, recorder::GlobalParamRecorder,
+                 cell_list::Union{Nothing, CellList} = nothing)
     if recorder.cond(sim.timestep)
         if recorder.type == "orient"
             push!(recorder.values, mean(
