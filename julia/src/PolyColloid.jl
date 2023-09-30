@@ -12,7 +12,6 @@ using RecipesBase
 using Colors: Colorant
 using ColorSchemes: ColorScheme, vikO, get
 import Adapt
-import Threads
 
 const numthreads=256
 
