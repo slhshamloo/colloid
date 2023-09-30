@@ -1,9 +1,12 @@
 function apply_step_cpu!(sim::ColloidSim)
     randchoices = rand(Bool, pcount(sim.colloid))
     randnums = rand(sim.numtype,
-        2 + !isnothing(sim.potential) || !isnothing(sim.pairpotential),
+        2 + Int(!isnothing(sim.potential) || !isnothing(sim.pairpotential)),
         pcount(sim.colloid))
     if !isnothing(sim.potential) || !isnothing(sim.pairpotential)
+        if length(sim.particle_potentials) == 0
+            sim.particle_potentials = zero(sim.colloid.angles)
+        end
         calculate_potentials!(sim.colloid, sim.cell_list, sim.potential,
                               sim.pairpotential, sim.particle_potentials)
     end
@@ -58,8 +61,11 @@ end
 
 @inline function has_violation(sim::ColloidSim, randnums::Matrix{<:Real},
                                idx::Integer, i::Integer, j::Integer)
-    if !isnothing(sim.potential) || !isnothing(sim.pairpotential)
-        potsum = zero(sim.particle_potentials)
+    if (violates_constraints(sim, idx) || (isnothing(sim.pairpotential)
+            && has_overlap(sim.colloid, sim.cell_list, idx, i, j)))
+        return true
+    elseif !isnothing(sim.potential) || !isnothing(sim.pairpotential)
+        potsum = zero(eltype(sim.particle_potentials))
         if !isnothing(sim.pairpotential)
             potsum += pairpotential_sum(
                 sim.colloid, sim.cell_list, sim.pairpotential, idx, i, j)
@@ -68,11 +74,9 @@ end
             potsum += sim.potential(sim.colloid, idx)
         end
         potchange = potsum - sim.particle_potentials[idx]
-        return (violates_constraints(sim, idx)
-            || randnums[3, idx] > exp(-sim.beta * potchange))
+        return randnums[3, idx] > exp(-sim.beta * potchange)
     else
-        return (violates_constraints(sim, idx)
-            || has_overlap(sim.colloid, sim.cell_list, idx, i, j))
+        return false
     end
 end
 

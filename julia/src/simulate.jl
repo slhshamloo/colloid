@@ -1,6 +1,6 @@
 mutable struct ColloidSim{F<:AbstractFloat}
     colloid::Colloid
-    cell_list::CellList
+    cell_list::Union{CellList, Nothing}
 
     seed::Integer
     timestep::Integer
@@ -37,11 +37,9 @@ function ColloidSim(pcount::Integer, sidenum::Integer, radius::Real,
     if gpu
         CUDA.seed!(seed)
         colloid = Colloid{numtype}(pcount, sidenum, radius, boxsize; gpu=true)
-        cell_list = CuCellList(colloid)
     else
         Random.seed!(seed)
         colloid = Colloid{numtype}(pcount, sidenum, radius, boxsize)
-        cell_list = SeqCellList(colloid)
     end
     if !isnothing(potential) || !isnothing(pairpotential)
         particle_potentials = zeros(numtype, pcount(colloid))
@@ -52,7 +50,7 @@ function ColloidSim(pcount::Integer, sidenum::Integer, radius::Real,
         particle_potentials = (gpu ? CuVector{numtype}(undef, 0)
                                    : Vector{numtype}(undef, 0))
     end
-    ColloidSim{numtype}(colloid, cell_list, seed, 0, zero(numtype), zero(numtype),
+    ColloidSim{numtype}(colloid, nothing, seed, 0, zero(numtype), zero(numtype),
         convert(numtype, beta), 0, 0, 0, 0, AbstractConstraint[], AbstractRecorder[],
         AbstractUpdater[], potential, pairpotential, particle_potentials, gpu, numtype)
 end
