@@ -1,6 +1,6 @@
 function katic_order(colloid::Colloid, cell_list::SeqCellList, k::Integer;
                      numtype::DataType = Float32)
-    orders = zeros(particle_count(colloid), Complex{numtype})
+    orders = zeros(pcount(colloid), Complex{numtype})
     for cell in CartesianIndices(cell_list.cells)
         i, j = Tuple(cell)
         for idx in cell_list.cells[i, j]
@@ -40,8 +40,8 @@ function katic_order(colloid::Colloid, cell_list::CuCellList, k::Integer;
     maxcount = maximum(cell_list.counts)
     groupcount = 9 * maxcount
     groups_per_block = numthreads ÷ groupcount
-    numblocks = particle_count(colloid) ÷ groups_per_block + 1
-    orders = CuArray(zeros(Complex{numtype}, particle_count(colloid)))
+    numblocks = pcount(colloid) ÷ groups_per_block + 1
+    orders = CuArray(zeros(Complex{numtype}, pcount(colloid)))
     @cuda(threads=numthreads, blocks=numblocks,
           shmem = groups_per_block * (2 * groupcount + k) * sizeof(numtype),
           katic_order_parallel!(colloid, cell_list, orders, k, maxcount,
@@ -64,7 +64,7 @@ function katic_order_parallel!(colloid::Colloid, cell_list::CuCellList,
     group += 1
     if is_thread_active
         particle = (blockIdx().x - 1) * groups_per_block + group
-        is_thread_active = particle <= particle_count(colloid)
+        is_thread_active = particle <= pcount(colloid)
         if is_thread_active
             i, j = get_cell_list_indices(colloid, cell_list, particle)
             is_thread_active = count_neighbors(cell_list, i, j) >= k

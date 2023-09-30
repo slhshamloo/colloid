@@ -11,7 +11,7 @@ struct SeqCellList <: CellList
 
         cells = [Int[] for i in 1:Int(colloid.boxsize[1] ÷ width[1]),
                            j in 1:Int(colloid.boxsize[2] ÷ width[2])]
-        for idx in 1:particle_count(colloid)
+        for idx in 1:pcount(colloid)
             i, j = get_cell_list_indices(colloid, size(cells), width, idx)
             push!(cells[i, j], idx)
         end
@@ -176,7 +176,7 @@ function calculate_potentials!(colloid::Colloid, cell_list::SeqCellList,
         potential::Union{Nothing, Function}, pairpotential::Union{Nothing, Function},
         particle_potentials::Vector{<:Real})
     if !isnothing(potential)
-        map!(idx -> potential(colloid, idx), particle_potentials, 1:particle_count(colloid))
+        map!(idx -> potential(colloid, idx), particle_potentials, 1:pcount(colloid))
     else
         particle_potentials .= 0
     end

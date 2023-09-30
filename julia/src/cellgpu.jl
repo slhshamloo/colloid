@@ -21,7 +21,7 @@ function CuCellList(colloid::Colloid, shift::AbstractArray = [0.0f0, 0.0f0];
 
     cells = CuArray(cells)
     counts = CuArray(counts)
-    @cuda(threads=numthreads, blocks=particle_count(colloid)÷numthreads+1,
+    @cuda(threads=numthreads, blocks=pcount(colloid)÷numthreads+1,
           build_cells_parallel!(colloid, cells, counts, width, shift[1], shift[2]))
 
     shift = CuVector{eltype(colloid.centers)}(shift)
@@ -47,7 +47,7 @@ end
 function build_cells_parallel!(colloid::Colloid, cells::CuDeviceArray,
         counts::CuDeviceArray, width::NTuple{2, <:Real}, xshift::Real, yshift::Real)
     idx = (blockIdx().x - 1) * blockDim().x + threadIdx().x
-    if idx <= particle_count(colloid)
+    if idx <= pcount(colloid)
         i, j = get_cell_list_indices(colloid, size(counts), width, xshift, yshift, idx)
         cellidx = CUDA.@atomic counts[i, j] += 1
         cells[cellidx + 1, i, j] = idx
@@ -60,7 +60,7 @@ function shift_cells!(colloid::Colloid, cell_list::CuCellList,
     cell_list.shift[1] += direction[1] * shift
     cell_list.shift[2] += direction[2] * shift
     cell_list.counts .= 0
-    @cuda(threads=numthreads, blocks=particle_count(colloid)÷numthreads+1,
+    @cuda(threads=numthreads, blocks=pcount(colloid)÷numthreads+1,
           build_cells_parallel!(colloid, cell_list.cells, cell_list.counts,
                                 cell_list.width, cell_list.shift[1], cell_list.shift[2]))
 end

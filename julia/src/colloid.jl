@@ -27,17 +27,17 @@ function Colloid{T}(sidenum::Integer, radius::Real, boxsize::Tuple{<:Real, <:Rea
         sidenum, radius, bisector, boxsize, centers, angles)
 end
 
-function Colloid{T}(particle_count::Integer, sidenum::Integer, radius::Real,
+function Colloid{T}(pcount::Integer, sidenum::Integer, radius::Real,
                     boxsize::Tuple{<:Real, <:Real}; gpu=false) where {T<:Real}
     bisector = radius * cos(π / sidenum)
 
     if gpu
-        angles = CuVector{T}(undef, particle_count)
-        centers = CuMatrix{T}(undef, 2, particle_count)
+        angles = CuVector{T}(undef, pcount)
+        centers = CuMatrix{T}(undef, 2, pcount)
         boxsize = CuVector{T}([boxsize[1], boxsize[2]])
     else
-        angles = Vector{T}(undef, particle_count)
-        centers = Matrix{T}(undef, 2, particle_count)
+        angles = Vector{T}(undef, pcount)
+        centers = Matrix{T}(undef, 2, pcount)
         boxsize = MVector{2, T}(boxsize)
     end
 
@@ -47,9 +47,9 @@ end
 
 Adapt.@adapt_structure Colloid
 
-@inline particle_count(colloid::Colloid) = size(colloid.centers, 2)
+@inline pcount(colloid::Colloid) = size(colloid.centers, 2)
 
-@inline particle_area(colloid::Colloid) = (
+@inline parea(colloid::Colloid) = (
     0.5 * colloid.sidenum * colloid.radius^2 * sin(2π / colloid.sidenum))
 
 @inline boxarea(colloid::Colloid) = colloid.boxsize[1] * colloid.boxsize[2]
@@ -66,7 +66,7 @@ function _build_vertices(sidenum::Integer, radius::Real,
     return vertices
 end
 
-function crystallize!(colloid::Colloid, gridcount::Integer = particle_count(colloid),
+function crystallize!(colloid::Colloid, gridcount::Integer = pcount(colloid),
         constraint::Function = (colloid, centers) -> trues(size(centers, 2)))
     particles_per_side = ceil(Int, √(gridcount))
     shortside = minimum(colloid.boxsize)
@@ -84,7 +84,7 @@ function crystallize!(colloid::Colloid, gridcount::Integer = particle_count(coll
     valid = constraint(colloid, centers)
     centers = centers[vcat(valid, valid)]
     centers = reshape(centers, 2, length(centers)÷2)
-    centers = centers[:, 1:particle_count(colloid)]
+    centers = centers[:, 1:pcount(colloid)]
 
     if isa(colloid.centers, CuArray)
         centers = CuArray(centers)

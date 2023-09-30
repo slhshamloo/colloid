@@ -1,7 +1,7 @@
 module PolyColloid
 
 export ColloidSim, ForcefulCompressor, MoveSizeTuner, TrajectoryRecorder,
-    run!, build_configuration!, crystallize!, particle_count, particle_area, boxarea
+    run!, build_configuration!, crystallize!, pcount, parea, boxarea
 
 using CUDA
 using StaticArrays

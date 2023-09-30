@@ -98,7 +98,7 @@ end
 
 @inline Base.length(trajectory::ColloidTrajectory) = length(trajectory.times)
 
-@inline particle_count(snapshot::ColloidSnapshot) = size(snapshot.centers, 2)
+@inline pcount(snapshot::ColloidSnapshot) = size(snapshot.centers, 2)
 
-@inline particle_area(snapshot::ColloidSnapshot) = (
+@inline parea(snapshot::ColloidSnapshot) = (
     0.5 * snapshot.sidenum * snapshot.radius^2 * sin(2π / snapshot.sidenum))

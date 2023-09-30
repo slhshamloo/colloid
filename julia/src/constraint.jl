@@ -65,7 +65,7 @@ end
 function has_violation(colloid::Colloid,
         constraints::AbstractVector{<:AbstractConstraint})
     for constraint in constraints
-        if any(i -> is_violated(colloid, constraint, i), 1:particle_count(colloid))
+        if any(i -> is_violated(colloid, constraint, i), 1:pcount(colloid))
             return true
         end
     end
@@ -77,14 +77,14 @@ function count_violations(colloid::Colloid,
     violations = 0
     for constraint in constraints
         violations += count(i -> is_violated(colloid, constraint, i),
-                            1:particle_count(colloid))
+                            1:pcount(colloid))
     end
     return violations
 end
 
 function count_violations_gpu(colloid::Colloid,
         constraints::AbstractVector{<:AbstractConstraint})
-    numblocks = particle_count(colloid) ÷ numthreads + 1
+    numblocks = pcount(colloid) ÷ numthreads + 1
     raw_constraints = build_raw_constraints(constraints, eltype(colloid.centers))
     violation_counts = CuArray(zeros(Int32, numblocks))
     @cuda(threads=numthreads, blocks=numblocks, shmem = numthreads * sizeof(Int32),
@@ -99,7 +99,7 @@ function count_violations_parallel(colloid::Colloid, constraints::RawConstraints
     blockviolations = CuDynamicSharedArray(Int32, blockDim().x)
     blockviolations[thread] = 0
 
-    if tid <= particle_count(colloid)
+    if tid <= pcount(colloid)
         for cidx in 1:length(constraints.typeids)
             if fullcheck(colloid, tid, constraints, cidx)
                 blockviolations[thread] += 1

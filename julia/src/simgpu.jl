@@ -1,42 +1,42 @@
-function apply_step!(sim::ColloidSim, cell_list::CuCellList)
-    sweeps = ceil(Int, mean(cell_list.counts))
-    randnums = CUDA.rand(sim.numtype, 4, size(cell_list.cells, 2),
-                         size(cell_list.cells, 3), sweeps)
-    randchoices = CUDA.rand(Bool, size(cell_list.cells, 2),
-                            size(cell_list.cells, 3), sweeps)
+function apply_step!(sim::ColloidSim)
+    sweeps = ceil(Int, mean(sim.cell_list.counts))
+    randnums = CUDA.rand(sim.numtype, 4, size(sim.cell_list.cells, 2),
+                         size(sim.cell_list.cells, 3), sweeps)
+    randchoices = CUDA.rand(Bool, size(sim.cell_list.cells, 2),
+                            size(sim.cell_list.cells, 3), sweeps)
     accept = CuArray(zeros(Int, 4))
-    cusim = build_cusim(sim, cell_list)
+    cusim = build_cusim(sim)
 
     for sweep in 1:sweeps
-        maxcount = maximum(cell_list.counts)
+        maxcount = maximum(sim.cell_list.counts)
         groupcount = 9 * maxcount + length(sim.constraints)
         groups_per_block = numthreads ÷ groupcount
         for color in shuffle(1:4)
-            cellcount = getcellcount(cell_list, color)
+            cellcount = getcellcount(sim.cell_list, color)
             numblocks = cellcount ÷ groups_per_block + 1
             @cuda(threads=numthreads, blocks=numblocks,
                   shmem = groups_per_block * (sizeof(Int32) + sizeof(sim.numtype)),
-                  apply_parallel_step!(cusim, cell_list, randnums, randchoices, accept,
+                  apply_parallel_step!(cusim, sim.cell_list, randnums, randchoices, accept,
                                        color, sweep, maxcount, groupcount, cellcount))
         end
         direction = ((1, 0), (-1, 0), (0, 1), (0, -1))[rand(1:4)]
-        shift = (direction[2] == 0 ? cell_list.width[1] : cell_list.width[2]) * (
+        shift = (direction[2] == 0 ? sim.cell_list.width[1] : sim.cell_list.width[2]) * (
             rand(sim.numtype) / 2)
-        shift_cells!(sim.colloid, cell_list, direction, shift)
+        shift_cells!(sim.colloid, sim.cell_list, direction, shift)
     end
     count_accepted_and_rejected_moves!(sim, accept)
 end
 
-function build_cusim(sim::ColloidSim, cell_list::CuCellList)
+function build_cusim(sim::ColloidSim)
     constraints = build_raw_constraints(sim.constraints, sim.numtype)
     if !isnothing(sim.potential) || !isnothing(sim.pairpotential)
         if length(sim.particle_potentials) == 0
             sim.particle_potentials = CuArray(
-                zeros(sim.numtype, particle_count(sim.colloid)))
+                zeros(sim.numtype, pcount(sim.colloid)))
         else
             sim.particle_potentials .= 0
         end
-        calculate_potentials!(sim.colloid, cell_list, sim.particle_potentials,
+        calculate_potentials!(sim.colloid, sim.cell_list, sim.particle_potentials,
                               sim.potential, sim.pairpotential)
     end
     CuColloidSim(sim.colloid, constraints, sim.move_radius, sim.rotation_span,

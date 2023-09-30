@@ -1,7 +1,7 @@
 @recipe function p(snapshot::ColloidSnapshot)
     vertices = _build_vertices(snapshot.sidenum, snapshot.radius,
                                snapshot.centers, snapshot.angles)
-    for particle in 1:particle_count(snapshot)
+    for particle in 1:pcount(snapshot)
         @series begin
             seriestype := :shape
 
@@ -23,7 +23,7 @@ end
 @recipe function p(snapshot::ColloidSnapshot, colors::Vector{<:Colorant})
     vertices = _build_vertices(snapshot.sidenum, snapshot.radius,
                                snapshot.centers, snapshot.angles)
-    for particle in 1:particle_count(snapshot)
+    for particle in 1:pcount(snapshot)
         @series begin
             seriestype := :shape
 

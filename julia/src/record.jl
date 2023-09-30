@@ -1,5 +1,4 @@
-function record!(sim::ColloidSim, recorder::TrajectoryRecorder,
-                 cell_list::Union{Nothing, CellList} = nothing)
+function record!(sim::ColloidSim, recorder::TrajectoryRecorder)
     if recorder.cond(sim.timestep)
         if recorder.savetomem
             if isnothing(recorder.trajectory)
@@ -60,21 +59,20 @@ function finalize!(recorder::TrajectoryRecorder)
     rm(recorder.filepath, recursive=true)
 end
 
-function record!(sim::ColloidSim, recorder::LocalParamRecorder, cell_list::CellList)
+function record!(sim::ColloidSim, recorder::LocalParamRecorder)
     if recorder.cond(sim.timestep)
         if recorder.type == "katic"
             if eltype(eltype(recorder.values)) <: Complex
-                numtype = eltype(eltype(recorder.values)) == ComplexF32 ? Float32 : Float64 
+                numtype = eltype(eltype(recorder.values)) == ComplexF32 ? Float32 : Float64
             end
             push!(recorder.values, katic_order(
-                  sim.colloid, cell_list, recorder.typeparams[1]; numtype=numtype))
+                  sim.colloid, sim.cell_list, recorder.typeparams[1]; numtype=numtype))
         end
         push!(recorder.times, sim.timestep)
     end
 end
 
-function record!(sim::ColloidSim, recorder::GlobalParamRecorder,
-                 cell_list::Union{Nothing, CellList} = nothing)
+function record!(sim::ColloidSim, recorder::GlobalParamRecorder)
     if recorder.cond(sim.timestep)
         if recorder.type == "orient"
             push!(recorder.values, mean(

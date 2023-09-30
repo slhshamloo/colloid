@@ -1,16 +1,16 @@
 function apply_step!(sim::ColloidSim, cell_list::SeqCellList)
-    randchoices = rand(Bool, particle_count(sim.colloid))
+    randchoices = rand(Bool, pcount(sim.colloid))
     randnums = rand(sim.numtype,
         2 + !isnothing(sim.potential) || !isnothing(sim.pairpotential),
-        particle_count(sim.colloid))
+        pcount(sim.colloid))
     if !isnothing(sim.potential) || !isnothing(sim.pairpotential)
         calculate_potentials!(sim.colloid, cell_list, sim.potential,
                               sim.pairpotential, sim.particle_potentials)
     end
     
     iter = (rand(Bool) ?
-        range(1, particle_count(sim.colloid))
-        : range(particle_count(sim.colloid), 1, step=-1)
+        range(1, pcount(sim.colloid))
+        : range(pcount(sim.colloid), 1, step=-1)
     )
     for idx in iter
         if randchoices[idx]
