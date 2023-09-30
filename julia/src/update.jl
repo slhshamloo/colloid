@@ -30,13 +30,16 @@ function update!(sim::ColloidSim, compressor::ForcefulCompressor)
             end
             if violations + count_overlaps(sim.colloid, new_cell_list) > (
                     compressor.max_overlap_fraction * pcount(sim.colloid))
-                sim.colloid.boxsize[1], sim.colloid.boxsize[2] = lxold, lyold
+                CUDA.@allowscalar sim.colloid.boxsize[1], sim.colloid.boxsize[2] = (
+                    lxold, lyold)
                 sim.colloid.centers ./= pos_scale
             else
                 sim.cell_list = new_cell_list
-                if (sim.colloid.boxsize[1] == compressor.target_boxsize[1]
-                        && sim.colloid.boxsize[2] == compressor.target_boxsize[2])
-                    compressor.reached_target = true
+                CUDA.allowscalar() do
+                    if (sim.colloid.boxsize[1] == compressor.target_boxsize[1]
+                            && sim.colloid.boxsize[2] == compressor.target_boxsize[2])
+                        compressor.reached_target = true
+                    end
                 end
             end
         end
@@ -77,22 +80,28 @@ end
 end
 
 @inline function get_force_compress_dims(sim::ColloidSim, compressor::ForcefulCompressor)
-    scale_factor = max(compressor.minscale,
-        1.0 - sim.move_radius / (2 * sim.colloid.radius))
+    CUDA.allowscalar() do
+        scale_factor = max(compressor.minscale,
+            1.0 - sim.move_radius / (2 * sim.colloid.radius))
 
-    if sim.colloid.boxsize[1] < compressor.target_boxsize[1]
-        lxnew = min(sim.colloid.boxsize[1] / scale_factor, compressor.target_boxsize[1])
-    else
-        lxnew = max(sim.colloid.boxsize[1] * scale_factor, compressor.target_boxsize[1])
+        if sim.colloid.boxsize[1] < compressor.target_boxsize[1]
+            lxnew = min(sim.colloid.boxsize[1] / scale_factor,
+                        compressor.target_boxsize[1])
+        else
+            lxnew = max(sim.colloid.boxsize[1] * scale_factor,
+                        compressor.target_boxsize[1])
+        end
+
+        if sim.colloid.boxsize[2] < compressor.target_boxsize[2]
+            lynew = min(sim.colloid.boxsize[2] / scale_factor,
+                        compressor.target_boxsize[2])
+        else
+            lynew = max(sim.colloid.boxsize[2] * scale_factor,
+                        compressor.target_boxsize[2])
+        end
+
+        return lxnew, lynew
     end
-
-    if sim.colloid.boxsize[2] < compressor.target_boxsize[2]
-        lynew = min(sim.colloid.boxsize[2] / scale_factor, compressor.target_boxsize[2])
-    else
-        lynew = max(sim.colloid.boxsize[2] * scale_factor, compressor.target_boxsize[2])
-    end
-
-    return lxnew, lynew
 end
 
 @inline function needs_compression(sim::ColloidSim, compressor::ForcefulCompressor)
@@ -105,7 +114,7 @@ end
 @inline function _set_complete_flag!(sim::ColloidSim, compressor::ForcefulCompressor)
     if sim.gpu && iszero(count_overlaps(sim.colloid, sim.cell_list)
                         + count_violations_gpu(sim.colloid, sim.constraints))
-        cell_list = CuCellList(sim.colloid, sim.cell_list.shift)
+        sim.cell_list = CuCellList(sim.colloid, sim.cell_list.shift)
         compressor.completed = true
     elseif iszero(count_overlaps(sim.colloid, sim.cell_list)
                     + count_violations_gpu)
@@ -115,9 +124,9 @@ end
 
 @inline function _apply_compression!(sim::ColloidSim, compressor::ForcefulCompressor)
     lxnew, lynew = get_force_compress_dims(sim, compressor)
-    lxold, lyold = sim.colloid.boxsize
+    CUDA.@allowscalar lxold, lyold = sim.colloid.boxsize
     
-    sim.colloid.boxsize[1], sim.colloid.boxsize[2] = lxnew, lynew
+    CUDA.@allowscalar sim.colloid.boxsize[1], sim.colloid.boxsize[2] = lxnew, lynew
     pos_scale = (lxnew / lxold, lynew / lyold)
     sim.colloid.centers .*= pos_scale
     return pos_scale, lxold, lyold

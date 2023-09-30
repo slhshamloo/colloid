@@ -52,7 +52,8 @@ Adapt.@adapt_structure Colloid
 @inline parea(colloid::Colloid) = (
     0.5 * colloid.sidenum * colloid.radius^2 * sin(2π / colloid.sidenum))
 
-@inline boxarea(colloid::Colloid) = colloid.boxsize[1] * colloid.boxsize[2]
+@inline boxarea(colloid::Colloid) =
+    CUDA.@allowscalar colloid.boxsize[1] * colloid.boxsize[2]
 
 function _build_vertices(sidenum::Integer, radius::Real,
         centers::AbstractMatrix, angles::AbstractVector)

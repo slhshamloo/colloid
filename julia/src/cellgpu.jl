@@ -21,7 +21,8 @@ function CuCellList(colloid::Colloid, shift::AbstractArray = [0.0f0, 0.0f0];
 
     cells = CuArray(cells)
     counts = CuArray(counts)
-    @cuda(threads=numthreads, blocks=pcount(colloid)÷numthreads+1,
+
+    CUDA.@allowscalar @cuda(threads=numthreads, blocks=pcount(colloid)÷numthreads+1,
           build_cells_parallel!(colloid, cells, counts, width, shift[1], shift[2]))
 
     shift = CuVector{eltype(colloid.centers)}(shift)
@@ -57,12 +58,14 @@ end
 
 function shift_cells!(colloid::Colloid, cell_list::CuCellList,
                       direction::Tuple{<:Integer, <:Integer}, shift::Real)
-    cell_list.shift[1] += direction[1] * shift
-    cell_list.shift[2] += direction[2] * shift
-    cell_list.counts .= 0
-    @cuda(threads=numthreads, blocks=pcount(colloid)÷numthreads+1,
-          build_cells_parallel!(colloid, cell_list.cells, cell_list.counts,
-                                cell_list.width, cell_list.shift[1], cell_list.shift[2]))
+    CUDA.allowscalar() do
+        cell_list.shift[1] += direction[1] * shift
+        cell_list.shift[2] += direction[2] * shift
+        cell_list.counts .= 0
+        @cuda(threads=numthreads, blocks=pcount(colloid)÷numthreads+1,
+            build_cells_parallel!(colloid, cell_list.cells, cell_list.counts,
+                                  cell_list.width, cell_list.shift[1], cell_list.shift[2]))
+    end
 end
 
 function count_overlaps(colloid::Colloid, cell_list::CuCellList)
