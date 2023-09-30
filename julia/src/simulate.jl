@@ -119,7 +119,11 @@ function run!(sim::ColloidSim, timesteps::Integer)
     end
 
     for _ in 1:timesteps
-        apply_step!(sim, cell_list)
+        if sim.gpu
+            apply_step_gpu!(sim)
+        else
+            apply_step_cpu!(sim)
+        end
         for updater in sim.updaters
             update!(sim, updater)
         end

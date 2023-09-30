@@ -1,4 +1,4 @@
-function apply_step!(sim::ColloidSim)
+function apply_step_gpu!(sim::ColloidSim)
     sweeps = ceil(Int, mean(sim.cell_list.counts))
     randnums = CUDA.rand(sim.numtype, 4, size(sim.cell_list.cells, 2),
                          size(sim.cell_list.cells, 3), sweeps)
