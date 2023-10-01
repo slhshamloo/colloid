@@ -8,9 +8,9 @@ struct CuCellList{T<:Real, A<:AbstractArray, M<:AbstractMatrix,
 end
 
 function CuCellList(colloid::Colloid, shift::AbstractArray = [0.0f0, 0.0f0];
-                    maxwidth::Real = 0.0f0, max_particle_per_cell=20)
+                    maxwidth::Real = 0.0f0, max_particle_per_cell=10)
     if iszero(maxwidth)
-        maxwidth = colloid.sidenum <= 4 ? 2 * colloid.radius : 2 * √2 * colloid.radius
+        maxwidth = get_maxwidth(colloid)
     end
     boxsize = Array(colloid.boxsize)
     width = (boxsize[1] / ceil(boxsize[1] / maxwidth),
@@ -31,6 +31,9 @@ function CuCellList(colloid::Colloid, shift::AbstractArray = [0.0f0, 0.0f0];
 end
 
 Adapt.@adapt_structure CuCellList
+
+@inline get_maxwidth(colloid::Colloid) = 
+    colloid.sidenum <= 4 ? 2 * colloid.radius : 2 * √2 * colloid.radius
 
 @inline function get_cell_list_indices(colloid::Colloid,
         gridsize::Tuple{<:Integer, <:Integer}, width::Tuple{<:Real, <:Real},

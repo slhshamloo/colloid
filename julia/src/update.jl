@@ -20,9 +20,10 @@ function update!(sim::ColloidSim, compressor::ForcefulCompressor)
         if compressor.reached_target
             set_complete_flag!(sim, compressor)
         else
-            pos_scale, lxold, lyold = _apply_compression!(sim, compressor)
+            pos_scale, lxold, lyold = apply_compression!(sim, compressor)
             if sim.gpu
-                new_cell_list = CuCellList(sim.colloid, sim.cell_list.shift)
+                new_cell_list = CuCellList(sim.colloid, sim.cell_list.shift,
+                    maxwidth=minimum(pos_scale)*get_maxwidth(sim.colloid))
                 violations = count_violations_gpu(sim.colloid, sim.constraints)
             else
                 new_cell_list = SeqCellList(sim.colloid)
@@ -111,7 +112,7 @@ end
             || (sim.gpu && count_violations_gpu(sim.colloid, sim.constraints) == 0)))
 end
 
-@inline function _set_complete_flag!(sim::ColloidSim, compressor::ForcefulCompressor)
+@inline function set_complete_flag!(sim::ColloidSim, compressor::ForcefulCompressor)
     if sim.gpu && iszero(count_overlaps(sim.colloid, sim.cell_list)
                         + count_violations_gpu(sim.colloid, sim.constraints))
         sim.cell_list = CuCellList(sim.colloid, sim.cell_list.shift)
@@ -122,7 +123,7 @@ end
     end
 end
 
-@inline function _apply_compression!(sim::ColloidSim, compressor::ForcefulCompressor)
+@inline function apply_compression!(sim::ColloidSim, compressor::ForcefulCompressor)
     lxnew, lynew = get_force_compress_dims(sim, compressor)
     CUDA.@allowscalar lxold, lyold = sim.colloid.boxsize
     
