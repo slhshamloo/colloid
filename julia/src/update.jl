@@ -114,11 +114,11 @@ end
 
 @inline function set_complete_flag!(sim::ColloidSim, compressor::ForcefulCompressor)
     if sim.gpu && iszero(count_overlaps(sim.colloid, sim.cell_list)
-                        + count_violations_gpu(sim.colloid, sim.constraints))
+                         + count_violations_gpu(sim.colloid, sim.constraints))
         sim.cell_list = CuCellList(sim.colloid, sim.cell_list.shift)
         compressor.completed = true
     elseif iszero(count_overlaps(sim.colloid, sim.cell_list)
-                    + count_violations_gpu)
+                  + count_violations(sim.colloid, sim.constraints))
         compressor.completed = true
     end
 end
