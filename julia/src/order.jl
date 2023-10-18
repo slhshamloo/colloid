@@ -1,3 +1,11 @@
+function katic_order(colloid::Colloid, k::Integer; numtype::DataType = Float32)
+    if isa(colloid.centers, CuArray)
+        return katic_order(colloid, CuCellList(colloid), k, numtype=numtype)
+    else
+        return katic_order(colloid, SeqCellList(colloid), k, numtype=numtype)
+    end
+end
+
 function katic_order(colloid::Colloid, cell_list::SeqCellList, k::Integer;
                      numtype::DataType = Float32)
     orders = zeros(pcount(colloid), Complex{numtype})
