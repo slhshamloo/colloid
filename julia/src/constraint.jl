@@ -29,79 +29,79 @@ function build_raw_constraints(constraints::AbstractVector{<:AbstractConstraint}
     return RawConstraints(CuArray(typeids), CuArray(data))
 end
 
-function is_violated(colloid::Colloid, disk::DiskWall, index::Integer)
-    is_overlapping_with_disk(colloid, index, disk.center, disk.radius) 
+function is_violated(particles::RegularPolygons, disk::DiskWall, index::Integer)
+    is_overlapping_with_disk(particles, index, disk.center, disk.radius) 
 end
 
-function fullcheck(colloid::Colloid, index::Integer,
+function fullcheck(particles::RegularPolygons, index::Integer,
         constraints::RawConstraints, cidx::Integer)
     if constraints.typeids[cidx] == 0
-        return is_overlapping_with_disk(colloid, index, (constraints.data[1, cidx],
+        return is_overlapping_with_disk(particles, index, (constraints.data[1, cidx],
             constraints.data[2, cidx]), constraints.data[3, cidx])
     else
         return false
     end
 end
 
-function fastcheck(colloid::Colloid, index::Integer,
+function fastcheck(particles::RegularPolygons, index::Integer,
         constraints::RawConstraints, cidx::Integer)
     if constraints.typeids[cidx] == 0
-        return _overlap_range_disk(colloid, index, (constraints.data[1, cidx],
+        return _overlap_range_disk(particles, index, (constraints.data[1, cidx],
             constraints.data[2, cidx]), constraints.data[3, cidx])
     else
         return false, false, (0.0f0, 0.0f0), 0.0f0
     end
 end
 
-function slowcheck(colloid::Colloid, index::Integer, dist::Tuple{<:Real, <:Real},
+function slowcheck(particles::RegularPolygons, index::Integer, dist::Tuple{<:Real, <:Real},
         distnorm::Real, constraints::RawConstraints, cidx::Integer)
     if constraints.typeids[cidx] == 0
-        _is_disk_over_side(colloid, index, dist, distnorm, constraints.data[3, cidx])
+        _is_disk_over_side(particles, index, dist, distnorm, constraints.data[3, cidx])
     else
         return false
     end
 end
 
-function has_violation(colloid::Colloid,
+function has_violation(particles::RegularPolygons,
         constraints::AbstractVector{<:AbstractConstraint})
     for constraint in constraints
-        if any(i -> is_violated(colloid, constraint, i), 1:pcount(colloid))
+        if any(i -> is_violated(particles, constraint, i), 1:count(particles))
             return true
         end
     end
     return false
 end
 
-function count_violations(colloid::Colloid,
+function count_violations(particles::RegularPolygons,
         constraints::AbstractVector{<:AbstractConstraint})
     violations = 0
     for constraint in constraints
-        violations += count(i -> is_violated(colloid, constraint, i),
-                            1:pcount(colloid))
+        violations += count(i -> is_violated(particles, constraint, i),
+                            1:count(particles))
     end
     return violations
 end
 
-function count_violations_gpu(colloid::Colloid,
+function count_violations_gpu(particles::RegularPolygons,
         constraints::AbstractVector{<:AbstractConstraint})
-    numblocks = pcount(colloid) ÷ numthreads + 1
-    raw_constraints = build_raw_constraints(constraints, eltype(colloid.centers))
+    numblocks = count(particles) ÷ numthreads + 1
+    raw_constraints = build_raw_constraints(constraints, eltype(particles.centers))
     violation_counts = CuArray(zeros(Int32, numblocks))
     @cuda(threads=numthreads, blocks=numblocks, shmem = numthreads * sizeof(Int32),
-          count_violations_parallel(colloid, raw_constraints, violation_counts))
+          count_violations_parallel(particles, raw_constraints, violation_counts))
     return sum(violation_counts)
 end
 
-function count_violations_parallel(colloid::Colloid, constraints::RawConstraints,
+function count_violations_parallel(particles::RegularPolygons, constraints::RawConstraints,
                                    violation_counts::CuDeviceArray)
     thread = threadIdx().x
     tid = thread + (blockIdx().x - 1) * blockDim().x
     blockviolations = CuDynamicSharedArray(Int32, blockDim().x)
     blockviolations[thread] = 0
 
-    if tid <= pcount(colloid)
+    if tid <= count(particles)
         for cidx in 1:length(constraints.typeids)
-            if fullcheck(colloid, tid, constraints, cidx)
+            if fullcheck(particles, tid, constraints, cidx)
                 blockviolations[thread] += 1
             end
         end

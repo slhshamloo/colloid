@@ -1,1 +1,1 @@
-# colloid
+# Hard Particle Monte Carlo (HPMC) Simulation of Polygonal Colloids

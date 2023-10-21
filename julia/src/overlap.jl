@@ -1,5 +1,5 @@
-function is_overlapping(colloid::Colloid, i::Integer, j::Integer)
-    definite_overlap, out_of_range, dist, distnorm = _overlap_range(colloid, i, j)
+function is_overlapping(particles::RegularPolygons, i::Integer, j::Integer)
+    definite_overlap, out_of_range, dist, distnorm = _overlap_range(particles, i, j)
     if definite_overlap
         return true
     end
@@ -8,33 +8,33 @@ function is_overlapping(colloid::Colloid, i::Integer, j::Integer)
     end
 
     centerangle = (dist[2] < 0 ? -1 : 1) * acos(dist[1] / distnorm)
-    return (_is_vertex_overlapping(colloid, i, j, distnorm, centerangle)
-            || _is_vertex_overlapping(colloid, j, i, distnorm, π + centerangle))
+    return (_is_vertex_overlapping(particles, i, j, distnorm, centerangle)
+            || _is_vertex_overlapping(particles, j, i, distnorm, π + centerangle))
 end
 
-@inline function _overlap_range(colloid::Colloid, i::Integer, j::Integer)
-    dist = (colloid.centers[1, i] - colloid.centers[1, j],
-            colloid.centers[2, i] - colloid.centers[2, j])
-    dist = (dist[1] - dist[1] ÷ (colloid.boxsize[1]/2) * colloid.boxsize[1],
-            dist[2] - dist[2] ÷ (colloid.boxsize[2]/2) * colloid.boxsize[2])
+@inline function _overlap_range(particles::RegularPolygons, i::Integer, j::Integer)
+    dist = (particles.centers[1, i] - particles.centers[1, j],
+            particles.centers[2, i] - particles.centers[2, j])
+    dist = (dist[1] - dist[1] ÷ (particles.boxsize[1]/2) * particles.boxsize[1],
+            dist[2] - dist[2] ÷ (particles.boxsize[2]/2) * particles.boxsize[2])
     distnorm = √(dist[1]^2 + dist[2]^2)
 
-    return (distnorm <= 2 * colloid.bisector, distnorm > 2 * colloid.radius,
+    return (distnorm <= 2 * particles.bisector, distnorm > 2 * particles.radius,
             dist, distnorm)
 end
 
-function _is_vertex_overlapping(colloid::Colloid, i::Integer, j::Integer,
+function _is_vertex_overlapping(particles::RegularPolygons, i::Integer, j::Integer,
                                 distnorm::Real, centerangle::Real)
-    normalangle = _get_periodic_angle(centerangle - colloid.angles[i], colloid.sidenum)
+    normalangle = _get_periodic_angle(centerangle - particles.angles[i], particles.sidenum)
     vertexangle = _get_periodic_angle(
-        π - π / colloid.sidenum + centerangle - colloid.angles[j], colloid.sidenum)
+        π - π / particles.sidenum + centerangle - particles.angles[j], particles.sidenum)
     diffangle = abs(normalangle - vertexangle)
 
     return (
         (abs(distnorm * cos(normalangle))
-            - colloid.radius * cos(diffangle) <= colloid.bisector)
-        && (abs(distnorm * cos(2π / colloid.sidenum - abs(normalangle)))
-            - colloid.radius * cos(2π / colloid.sidenum - diffangle) <= colloid.bisector)
+            - particles.radius * cos(diffangle) <= particles.bisector)
+        && (abs(distnorm * cos(2π / particles.sidenum - abs(normalangle)))
+            - particles.radius * cos(2π / particles.sidenum - diffangle) <= particles.bisector)
     )
 end
 
@@ -43,40 +43,40 @@ end
     return angle + (angle > 0 ? -1 : 1) * π / sidenum
 end
 
-function is_overlapping_with_disk(colloid::Colloid, index::Integer,
+function is_overlapping_with_disk(particles::RegularPolygons, index::Integer,
         center::Tuple{<:Real, <:Real}, radius::Real)
     definite_overlap, out_of_range, dist, distnorm = _overlap_range_disk(
-        colloid, index, center, radius)
+        particles, index, center, radius)
     if definite_overlap
         return true
     end
     if out_of_range
         return false
     end
-    return _is_disk_over_side(colloid, index, dist, distnorm, radius)
+    return _is_disk_over_side(particles, index, dist, distnorm, radius)
 end
 
-@inline function _overlap_range_disk(colloid::Colloid, index::Integer,
+@inline function _overlap_range_disk(particles::RegularPolygons, index::Integer,
         center::Tuple{<:Real, <:Real}, radius::Real)
-    dist = (center[1] - colloid.centers[1, index],
-            center[2] - colloid.centers[2, index])
-    dist = (dist[1] - dist[1] ÷ (colloid.boxsize[1]/2) * colloid.boxsize[1],
-            dist[2] - dist[2] ÷ (colloid.boxsize[2]/2) * colloid.boxsize[2])
+    dist = (center[1] - particles.centers[1, index],
+            center[2] - particles.centers[2, index])
+    dist = (dist[1] - dist[1] ÷ (particles.boxsize[1]/2) * particles.boxsize[1],
+            dist[2] - dist[2] ÷ (particles.boxsize[2]/2) * particles.boxsize[2])
     distnorm = √(dist[1]^2 + dist[2]^2)
-    return (distnorm <= radius + colloid.bisector, distnorm > radius + colloid.radius,
+    return (distnorm <= radius + particles.bisector, distnorm > radius + particles.radius,
             dist, distnorm)
 end
 
-function _is_disk_over_side(colloid::Colloid, index::Integer,
+function _is_disk_over_side(particles::RegularPolygons, index::Integer,
         dist::Tuple{<:Real, <:Real}, distnorm::Real, radius::Real)
     centerangle = (dist[2] < 0 ? -1 : 1) * acos(dist[1] / distnorm)
-    colloid_angle = 2π / colloid.sidenum
-    vertexnum = fld(centerangle - colloid.angles[index], colloid_angle)
+    particles_angle = 2π / particles.sidenum
+    vertexnum = fld(centerangle - particles.angles[index], particles_angle)
     
-    v1 = (colloid.radius * cos(vertexnum * colloid_angle - colloid.angles[index]),
-          colloid.radius * sin(vertexnum * colloid_angle - colloid.angles[index]))
-    v2 = (colloid.radius * cos((vertexnum + 1) * colloid_angle - colloid.angles[index]),
-          colloid.radius * sin((vertexnum + 1) * colloid_angle - colloid.angles[index]))
+    v1 = (particles.radius * cos(vertexnum * particles_angle - particles.angles[index]),
+          particles.radius * sin(vertexnum * particles_angle - particles.angles[index]))
+    v2 = (particles.radius * cos((vertexnum + 1) * particles_angle - particles.angles[index]),
+          particles.radius * sin((vertexnum + 1) * particles_angle - particles.angles[index]))
     
     r1 = (dist[1] - v1[1], dist[2] - v1[2])
     v12 = (v2[1] - v1[1], v2[2] - v1[2])

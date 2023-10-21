@@ -1,4 +1,4 @@
-function update!(sim::ColloidSim, tuner::MoveSizeTuner)
+function update!(sim::HPMCSimulation, tuner::MoveSizeTuner)
     if tuner.cond(sim.timestep)
         translation_acceptance, rotation_acceptance = get_new_acceptance_rates(sim, tuner)
         set_tuner_flags!(tuner, translation_acceptance, rotation_acceptance)
@@ -15,30 +15,30 @@ function update!(sim::ColloidSim, tuner::MoveSizeTuner)
     end
 end
 
-function update!(sim::ColloidSim, compressor::ForcefulCompressor)
+function update!(sim::HPMCSimulation, compressor::ForcefulCompressor)
     if needs_compression(sim, compressor)
         if compressor.reached_target
             set_complete_flag!(sim, compressor)
         else
             pos_scale, lxold, lyold = apply_compression!(sim, compressor)
             if sim.gpu
-                new_cell_list = CuCellList(sim.colloid, sim.cell_list.shift,
-                    maxwidth=minimum(pos_scale)*get_maxwidth(sim.colloid))
-                violations = count_violations_gpu(sim.colloid, sim.constraints)
+                new_cell_list = CuCellList(sim.particles, sim.cell_list.shift,
+                    maxwidth=minimum(pos_scale)*get_maxwidth(sim.particles))
+                violations = count_violations_gpu(sim.particles, sim.constraints)
             else
-                new_cell_list = SeqCellList(sim.colloid)
-                violations = count_violations(sim.colloid, sim.constraints)
+                new_cell_list = SeqCellList(sim.particles)
+                violations = count_violations(sim.particles, sim.constraints)
             end
-            if violations + count_overlaps(sim.colloid, new_cell_list) > (
-                    compressor.max_overlap_fraction * pcount(sim.colloid))
-                CUDA.@allowscalar sim.colloid.boxsize[1], sim.colloid.boxsize[2] = (
+            if violations + count_overlaps(sim.particles, new_cell_list) > (
+                    compressor.max_overlap_fraction * count(sim.particles))
+                CUDA.@allowscalar sim.particles.boxsize[1], sim.particles.boxsize[2] = (
                     lxold, lyold)
-                sim.colloid.centers ./= pos_scale
+                sim.particles.centers ./= pos_scale
             else
                 sim.cell_list = new_cell_list
                 CUDA.allowscalar() do
-                    if (sim.colloid.boxsize[1] == compressor.target_boxsize[1]
-                            && sim.colloid.boxsize[2] == compressor.target_boxsize[2])
+                    if (sim.particles.boxsize[1] == compressor.target_boxsize[1]
+                            && sim.particles.boxsize[2] == compressor.target_boxsize[2])
                         compressor.reached_target = true
                     end
                 end
@@ -47,7 +47,7 @@ function update!(sim::ColloidSim, compressor::ForcefulCompressor)
     end
 end
 
-@inline function get_new_acceptance_rates(sim::ColloidSim, tuner::MoveSizeTuner)
+@inline function get_new_acceptance_rates(sim::HPMCSimulation, tuner::MoveSizeTuner)
     acc_trans = sim.accepted_translations - tuner.prev_accepted_translations
     rej_trans = sim.rejected_translations - tuner.prev_rejected_translations
     acc_rot = sim.accepted_rotations - tuner.prev_accepted_rotations
@@ -73,31 +73,31 @@ end
     end
 end
 
-@inline function set_tuner_prev_values!(sim::ColloidSim, tuner::MoveSizeTuner)
+@inline function set_tuner_prev_values!(sim::HPMCSimulation, tuner::MoveSizeTuner)
     tuner.prev_accepted_translations = sim.accepted_translations
     tuner.prev_rejected_translations = sim.rejected_translations
     tuner.prev_accepted_rotations = sim.accepted_rotations
     tuner.prev_rejected_rotations = sim.rejected_rotations
 end
 
-@inline function get_force_compress_dims(sim::ColloidSim, compressor::ForcefulCompressor)
+@inline function get_force_compress_dims(sim::HPMCSimulation, compressor::ForcefulCompressor)
     CUDA.allowscalar() do
         scale_factor = max(compressor.minscale,
-            1.0 - sim.move_radius / (2 * sim.colloid.radius))
+            1.0 - sim.move_radius / (2 * sim.particles.radius))
 
-        if sim.colloid.boxsize[1] < compressor.target_boxsize[1]
-            lxnew = min(sim.colloid.boxsize[1] / scale_factor,
+        if sim.particles.boxsize[1] < compressor.target_boxsize[1]
+            lxnew = min(sim.particles.boxsize[1] / scale_factor,
                         compressor.target_boxsize[1])
         else
-            lxnew = max(sim.colloid.boxsize[1] * scale_factor,
+            lxnew = max(sim.particles.boxsize[1] * scale_factor,
                         compressor.target_boxsize[1])
         end
 
-        if sim.colloid.boxsize[2] < compressor.target_boxsize[2]
-            lynew = min(sim.colloid.boxsize[2] / scale_factor,
+        if sim.particles.boxsize[2] < compressor.target_boxsize[2]
+            lynew = min(sim.particles.boxsize[2] / scale_factor,
                         compressor.target_boxsize[2])
         else
-            lynew = max(sim.colloid.boxsize[2] * scale_factor,
+            lynew = max(sim.particles.boxsize[2] * scale_factor,
                         compressor.target_boxsize[2])
         end
 
@@ -105,30 +105,30 @@ end
     end
 end
 
-@inline function needs_compression(sim::ColloidSim, compressor::ForcefulCompressor)
+@inline function needs_compression(sim::HPMCSimulation, compressor::ForcefulCompressor)
     return (!compressor.completed && compressor.cond(sim.timestep)
-        && !has_overlap(sim.colloid, sim.cell_list)
-        && ((!sim.gpu && !has_violation(sim.colloid, sim.constraints))
-            || (sim.gpu && count_violations_gpu(sim.colloid, sim.constraints) == 0)))
+        && !has_overlap(sim.particles, sim.cell_list)
+        && ((!sim.gpu && !has_violation(sim.particles, sim.constraints))
+            || (sim.gpu && count_violations_gpu(sim.particles, sim.constraints) == 0)))
 end
 
-@inline function set_complete_flag!(sim::ColloidSim, compressor::ForcefulCompressor)
-    if sim.gpu && iszero(count_overlaps(sim.colloid, sim.cell_list)
-                         + count_violations_gpu(sim.colloid, sim.constraints))
-        sim.cell_list = CuCellList(sim.colloid, sim.cell_list.shift)
+@inline function set_complete_flag!(sim::HPMCSimulation, compressor::ForcefulCompressor)
+    if sim.gpu && iszero(count_overlaps(sim.particles, sim.cell_list)
+                         + count_violations_gpu(sim.particles, sim.constraints))
+        sim.cell_list = CuCellList(sim.particles, sim.cell_list.shift)
         compressor.completed = true
-    elseif iszero(count_overlaps(sim.colloid, sim.cell_list)
-                  + count_violations(sim.colloid, sim.constraints))
+    elseif iszero(count_overlaps(sim.particles, sim.cell_list)
+                  + count_violations(sim.particles, sim.constraints))
         compressor.completed = true
     end
 end
 
-@inline function apply_compression!(sim::ColloidSim, compressor::ForcefulCompressor)
+@inline function apply_compression!(sim::HPMCSimulation, compressor::ForcefulCompressor)
     lxnew, lynew = get_force_compress_dims(sim, compressor)
-    CUDA.@allowscalar lxold, lyold = sim.colloid.boxsize
+    CUDA.@allowscalar lxold, lyold = sim.particles.boxsize
     
-    CUDA.@allowscalar sim.colloid.boxsize[1], sim.colloid.boxsize[2] = lxnew, lynew
+    CUDA.@allowscalar sim.particles.boxsize[1], sim.particles.boxsize[2] = lxnew, lynew
     pos_scale = (lxnew / lxold, lynew / lyold)
-    sim.colloid.centers .*= pos_scale
+    sim.particles.centers .*= pos_scale
     return pos_scale, lxold, lyold
 end

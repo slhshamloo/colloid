@@ -1,7 +1,7 @@
-@recipe function p(snapshot::ColloidSnapshot)
+@recipe function p(snapshot::RegularPolygonsSnapshot)
     vertices = _build_vertices(snapshot.sidenum, snapshot.radius,
                                snapshot.centers, snapshot.angles)
-    for particle in 1:pcount(snapshot)
+    for particle in 1:count(snapshot)
         @series begin
             seriestype := :shape
 
@@ -20,10 +20,10 @@
     end
 end
 
-@recipe function p(snapshot::ColloidSnapshot, colors::Vector{<:Colorant})
+@recipe function p(snapshot::RegularPolygonsSnapshot, colors::Vector{<:Colorant})
     vertices = _build_vertices(snapshot.sidenum, snapshot.radius,
                                snapshot.centers, snapshot.angles)
-    for particle in 1:pcount(snapshot)
+    for particle in 1:count(snapshot)
         @series begin
             seriestype := :shape
 
@@ -41,7 +41,8 @@ end
     end
 end
 
-@recipe p(snapshot::ColloidSnapshot, colors::Vector{<:AbstractFloat},
+@recipe p(snapshot::RegularPolygonsSnapshot, colors::Vector{<:AbstractFloat},
           scheme::ColorScheme = vikO) = (snapshot, [get(scheme, color) for color in colors])
 
-@recipe p(::Type{<:Colloid}, colloid::Colloid) = ColloidSnapshot(colloid)
+@recipe p(::Type{<:RegularPolygons}, particles::RegularPolygons) =
+    RegularPolygonsSnapshot(particles)

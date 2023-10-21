@@ -1,4 +1,4 @@
-struct ColloidSnapshot
+struct RegularPolygonsSnapshot
     sidenum::Integer
     radius::Real
     boxsize::Tuple{<:Real, <:Real}
@@ -7,7 +7,7 @@ struct ColloidSnapshot
     time::Integer
 end
 
-struct ColloidTrajectory
+struct RegularPolygonsTrajectory
     sidenum::Integer
     radius::Real
     boxsizes::AbstractVector
@@ -20,15 +20,16 @@ struct TrajectoryReader
     filepath::String
 end
 
-ColloidSnapshot(colloid::Colloid) = ColloidSnapshot(
-    colloid.sidenum, colloid.radius, Tuple(colloid.boxsize),
-    Array(colloid.centers), Array(colloid.angles), 0) 
+RegularPolygonsSnapshot(particles::RegularPolygons) = RegularPolygonsSnapshot(
+    particles.sidenum, particles.radius, Tuple(particles.boxsize),
+    Array(particles.centers), Array(particles.angles), 0) 
 
-Colloid(snapshot::ColloidSnapshot; gpu=false) = Colloid{eltype(snapshot.centers)}(
-    snapshot.sidenum, snapshot.radius, snapshot.boxsize,
-    snapshot.centers, snapshot.angles; gpu=gpu)
+RegularPolygons(snapshot::RegularPolygonsSnapshot; gpu=false) =
+    RegularPolygons{eltype(snapshot.centers)}(
+        snapshot.sidenum, snapshot.radius, snapshot.boxsize,
+        snapshot.centers, snapshot.angles; gpu=gpu)
 
-function ColloidTrajectory(filepath)
+function RegularPolygonsTrajectory(filepath)
     jldopen(filepath) do f
         sidenum, radius = f["sidenum"], f["radius"]
     
@@ -53,23 +54,24 @@ function ColloidTrajectory(filepath)
                 throw(e)
             end
         end
-        return ColloidTrajectory(sidenum, radius, boxsizes, centers, angles, times)
+        return RegularPolygonsTrajectory(sidenum, radius, boxsizes, centers, angles, times)
     end
 end
 
-Base.getindex(trajectory::ColloidTrajectory, frame::Int) = ColloidSnapshot(
+Base.getindex(trajectory::RegularPolygonsTrajectory, frame::Int) = RegularPolygonsSnapshot(
     trajectory.sidenum, trajectory.radius,
     ((trajectory.boxsizes[frame])[1], (trajectory.boxsizes[frame])[2]),
     trajectory.centers[frame], trajectory.angles[frame], trajectory.times[frame])
 
-Base.getindex(trajectory::ColloidTrajectory, frames::AbstractUnitRange) = ColloidTrajectory(
-    trajectory.sidenum, trajectory.radius, trajectory.boxsizes[frames],
-    trajectory.centers[frames], trajectory.angles[frames], trajectory.times[frames])
+Base.getindex(trajectory::RegularPolygonsTrajectory, frames::AbstractUnitRange) =
+    RegularPolygonsTrajectory(
+        trajectory.sidenum, trajectory.radius, trajectory.boxsizes[frames],
+        trajectory.centers[frames], trajectory.angles[frames], trajectory.times[frames])
 
 function Base.getindex(reader::TrajectoryReader, frame::Int)
     jldopen(reader.filepath) do f
         boxsize = f["frame$frame/boxsize"]
-        return ColloidSnapshot(f["sidenum"], f["radius"], (boxsize[1], boxsize[2]),
+        return RegularPolygonsSnapshot(f["sidenum"], f["radius"], (boxsize[1], boxsize[2]),
             f["frame$frame/centers"], f["frame$frame/angles"], f["frame$frame/time"])
     end
 end
@@ -92,13 +94,13 @@ function Base.getindex(reader::TrajectoryReader, frames::AbstractUnitRange)
             push!(times, f["frame$frame/time"])
             frame += 1
         end
-        return ColloidTrajectory(sidenum, radius, boxsizes, centers, angles, times)
+        return RegularPolygonsTrajectory(sidenum, radius, boxsizes, centers, angles, times)
     end
 end
 
-@inline Base.length(trajectory::ColloidTrajectory) = length(trajectory.times)
+@inline Base.length(trajectory::RegularPolygonsTrajectory) = length(trajectory.times)
 
-@inline pcount(snapshot::ColloidSnapshot) = size(snapshot.centers, 2)
+@inline count(snapshot::RegularPolygonsSnapshot) = size(snapshot.centers, 2)
 
-@inline parea(snapshot::ColloidSnapshot) = (
+@inline area(snapshot::RegularPolygonsSnapshot) = (
     0.5 * snapshot.sidenum * snapshot.radius^2 * sin(2π / snapshot.sidenum))

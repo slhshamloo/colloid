@@ -1,5 +1,5 @@
-mutable struct ColloidSim{F<:AbstractFloat}
-    colloid::Colloid
+mutable struct HPMCSimulation{F<:AbstractFloat}
+    particles::RegularPolygons
     cell_list::Union{CellList, Nothing}
 
     seed::Integer
@@ -26,7 +26,7 @@ mutable struct ColloidSim{F<:AbstractFloat}
     numtype::DataType
 end
 
-function ColloidSim(pcount::Integer, sidenum::Integer, radius::Real,
+function HPMCSimulation(count::Integer, sidenum::Integer, radius::Real,
         boxsize::Tuple{<:Real, <:Real}; seed::Integer = -1, gpu::Bool = false,
         double::Bool = false, beta::Real = 1, potential::Union{Function, Nothing} = nothing,
         pairpotential::Union{Function, Nothing} = nothing)
@@ -36,13 +36,13 @@ function ColloidSim(pcount::Integer, sidenum::Integer, radius::Real,
     end
     if gpu
         CUDA.seed!(seed)
-        colloid = Colloid{numtype}(pcount, sidenum, radius, boxsize; gpu=true)
+        particles = RegularPolygons{numtype}(count, sidenum, radius, boxsize; gpu=true)
     else
         Random.seed!(seed)
-        colloid = Colloid{numtype}(pcount, sidenum, radius, boxsize)
+        particles = RegularPolygons{numtype}(count, sidenum, radius, boxsize)
     end
     if !isnothing(potential) || !isnothing(pairpotential)
-        particle_potentials = zeros(numtype, pcount(colloid))
+        particle_potentials = zeros(numtype, count(particles))
         if gpu
             particle_potentials = CuArray(particle_potentials)
         end
@@ -50,12 +50,12 @@ function ColloidSim(pcount::Integer, sidenum::Integer, radius::Real,
         particle_potentials = (gpu ? CuVector{numtype}(undef, 0)
                                    : Vector{numtype}(undef, 0))
     end
-    ColloidSim{numtype}(colloid, nothing, seed, 0, zero(numtype), zero(numtype),
+    HPMCSimulation{numtype}(particles, nothing, seed, 0, zero(numtype), zero(numtype),
         convert(numtype, beta), 0, 0, 0, 0, AbstractConstraint[], AbstractRecorder[],
         AbstractUpdater[], potential, pairpotential, particle_potentials, gpu, numtype)
 end
 
-function ColloidSim(colloid::Colloid; seed::Integer = -1, gpu::Bool = false,
+function HPMCSimulation(particles::RegularPolygons; seed::Integer = -1, gpu::Bool = false,
         double::Bool = false, beta::Real = 1, potential::Union{Function, Nothing} = nothing,
         pairpotential::Union{Function, Nothing} = nothing)
     numtype = double ? Float64 : Float32
@@ -64,13 +64,13 @@ function ColloidSim(colloid::Colloid; seed::Integer = -1, gpu::Bool = false,
     end
     if gpu
         CUDA.seed!(seed)
-        cell_list = CuCellList(colloid)
+        cell_list = CuCellList(particles)
     else
         Random.seed!(seed)
-        cell_list = SeqCellList(colloid)
+        cell_list = SeqCellList(particles)
     end
     if !isnothing(potential) || !isnothing(pairpotential)
-        particle_potentials = zeros(numtype, pcount(colloid))
+        particle_potentials = zeros(numtype, count(particles))
         if gpu
             particle_potentials = CuArray(particle_potentials)
         end
@@ -78,14 +78,14 @@ function ColloidSim(colloid::Colloid; seed::Integer = -1, gpu::Bool = false,
         particle_potentials = (gpu ? CuVector{numtype}(undef, 0)
                                    : Vector{numtype}(undef, 0))
     end
-    ColloidSim{numtype}(colloid, cell_list, seed, 0, zero(numtype), zero(numtype),
+    HPMCSimulation{numtype}(particles, cell_list, seed, 0, zero(numtype), zero(numtype),
         convert(numtype, beta), 0, 0, 0, 0, AbstractConstraint[], AbstractRecorder[],
         AbstractUpdater[], potential, pairpotential, particle_potentials, gpu, numtype)
 end
 
-struct CuColloidSim{C<:Colloid, RC<:RawConstraints, F<:AbstractFloat, V<:AbstractVector,
+struct CuHPMCSimulation{C<:RegularPolygons, RC<:RawConstraints, F<:AbstractFloat, V<:AbstractVector,
                     P<:Union{Function, Nothing}, PP<:Union{Function, Nothing}}
-    colloid::C
+    particles::C
     constraints::RC
 
     move_radius::F
@@ -97,23 +97,23 @@ struct CuColloidSim{C<:Colloid, RC<:RawConstraints, F<:AbstractFloat, V<:Abstrac
     particle_potentials::V
 end
 
-@inline CuColloidSim(colloid::Colloid,
+@inline CuHPMCSimulation(particles::RegularPolygons,
         constraints::RawConstraints, move_radius::F, rotation_span::F, beta::F,
         potential::Union{Function, Nothing}, pairpotential::Union{Function, Nothing},
         particle_potentials::AbstractVector) where {F<:AbstractFloat} =
-    CuColloidSim{typeof(colloid), typeof(constraints), F, typeof(particle_potentials),
-        typeof(potential), typeof(pairpotential)}(colloid, constraints, move_radius,
+    CuHPMCSimulation{typeof(particles), typeof(constraints), F, typeof(particle_potentials),
+        typeof(potential), typeof(pairpotential)}(particles, constraints, move_radius,
         rotation_span, beta, potential, pairpotential, particle_potentials)
 
-Adapt.@adapt_structure CuColloidSim
+Adapt.@adapt_structure CuHPMCSimulation
 
-function run!(sim::ColloidSim, timesteps::Integer)
+function run!(sim::HPMCSimulation, timesteps::Integer)
     (sim.accepted_translations, sim.rejected_translations,
         sim.accepted_rotations, sim.rejected_rotations) = (0, 0, 0, 0)
     if sim.gpu
-        sim.cell_list = CuCellList(sim.colloid)
+        sim.cell_list = CuCellList(sim.particles)
     else
-        sim.cell_list = SeqCellList(sim.colloid)
+        sim.cell_list = SeqCellList(sim.particles)
     end
 
     for _ in 1:timesteps
