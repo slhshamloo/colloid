@@ -1,2 +1,2 @@
-/julia/*.ipynb linguist-language=julia
-/hoomd/*.ipynb linguist-language=python
+/julia/**/*.ipynb linguist-language=julia
+/hoomd/**/*.ipynb linguist-language=python
