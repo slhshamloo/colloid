@@ -1,5 +1,5 @@
 mutable struct HPMCSimulation{F<:AbstractFloat}
-    particles::RegularPolygons
+    particles::ParticleCollection
     cell_list::Union{CellList, Nothing}
 
     seed::Integer
@@ -83,8 +83,8 @@ function HPMCSimulation(particles::RegularPolygons; seed::Integer = -1, gpu::Boo
         AbstractUpdater[], potential, pairpotential, particle_potentials, gpu, numtype)
 end
 
-struct CuHPMCSimulation{C<:RegularPolygons, RC<:RawConstraints, F<:AbstractFloat, V<:AbstractVector,
-                    P<:Union{Function, Nothing}, PP<:Union{Function, Nothing}}
+struct CuHPMCSim{C<:RegularPolygons, RC<:RawConstraints, F<:AbstractFloat,
+        V<:AbstractVector, P<:Union{Function, Nothing}, PP<:Union{Function, Nothing}}
     particles::C
     constraints::RC
 
@@ -97,15 +97,15 @@ struct CuHPMCSimulation{C<:RegularPolygons, RC<:RawConstraints, F<:AbstractFloat
     particle_potentials::V
 end
 
-@inline CuHPMCSimulation(particles::RegularPolygons,
+@inline CuHPMCSim(particles::RegularPolygons,
         constraints::RawConstraints, move_radius::F, rotation_span::F, beta::F,
         potential::Union{Function, Nothing}, pairpotential::Union{Function, Nothing},
         particle_potentials::AbstractVector) where {F<:AbstractFloat} =
-    CuHPMCSimulation{typeof(particles), typeof(constraints), F, typeof(particle_potentials),
+    CuHPMCSim{typeof(particles), typeof(constraints), F, typeof(particle_potentials),
         typeof(potential), typeof(pairpotential)}(particles, constraints, move_radius,
         rotation_span, beta, potential, pairpotential, particle_potentials)
 
-Adapt.@adapt_structure CuHPMCSimulation
+Adapt.@adapt_structure CuHPMCSim
 
 function run!(sim::HPMCSimulation, timesteps::Integer)
     (sim.accepted_translations, sim.rejected_translations,

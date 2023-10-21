@@ -39,7 +39,7 @@ function build_cusim(sim::HPMCSimulation)
         calculate_potentials!(sim.particles, sim.cell_list, sim.particle_potentials,
                               sim.potential, sim.pairpotential)
     end
-    CuHPMCSimulation(sim.particles, constraints, sim.move_radius, sim.rotation_span,
+    CuHPMCSim(sim.particles, constraints, sim.move_radius, sim.rotation_span,
                  sim.beta, sim.potential, sim.pairpotential, sim.particle_potentials)
 end
 
@@ -55,7 +55,7 @@ function count_accepted_and_rejected_moves!(sim::HPMCSimulation, accept::CuArray
     sim.rejected_rotations += accept[4]
 end
 
-function apply_parallel_step!(cusim::CuHPMCSimulation, cell_list::CuCellList, 
+function apply_parallel_step!(cusim::CuHPMCSim, cell_list::CuCellList, 
         randnums::CuDeviceArray, randchoices::CuDeviceArray, accept::CuDeviceArray,
         color::Integer, sweep::Integer, maxcount::Integer, groucount::Integer,
         cellcount::Integer)
@@ -90,7 +90,7 @@ function apply_parallel_step!(cusim::CuHPMCSimulation, cell_list::CuCellList,
     return
 end
 
-function apply_parallel_move!(cusim::CuHPMCSimulation, cell_list::CuCellList,
+function apply_parallel_move!(cusim::CuHPMCSim, cell_list::CuCellList,
         randnums::CuDeviceArray, randchoices::CuDeviceArray, accept::CuDeviceArray,
         idx::CuDeviceArray, group_potentials::CuDeviceArray, groucount::Integer,
         maxcount::Integer, group::Integer, thread::Integer, sweep::Integer,
@@ -125,7 +125,7 @@ function apply_parallel_move!(cusim::CuHPMCSimulation, cell_list::CuCellList,
     return
 end
 
-function apply_parallel_trial!(cusim::CuHPMCSimulation, cell_list::CuCellList,
+function apply_parallel_trial!(cusim::CuHPMCSim, cell_list::CuCellList,
         randnums::CuDeviceArray, randchoices::CuDeviceArray,
         idx::CuDeviceVector, group_potentials::CuDeviceArray,
         group::Integer, sweep::Integer, i::Integer, j::Integer)
@@ -205,7 +205,7 @@ function checkconstraint!(particles::RegularPolygons, constraints::RawConstraint
     end
 end
  
-function checkpotential!(cusim::CuHPMCSimulation, cell_list::CuCellList,
+function checkpotential!(cusim::CuHPMCSim, cell_list::CuCellList,
         randnums::CuDeviceArray, idx::CuDeviceArray, group_potentials::CuDeviceArray,
         maxcount::Integer, group::Integer, thread::Integer, sweep::Integer,
         i::Integer, j::Integer, passed_overlap_check::Bool)
@@ -238,7 +238,7 @@ function checkpotential!(cusim::CuHPMCSimulation, cell_list::CuCellList,
     end
 end
 
-@inline function apply_parallel_acceptance!(cusim::CuHPMCSimulation, accept::CuDeviceArray,
+@inline function apply_parallel_acceptance!(cusim::CuHPMCSim, accept::CuDeviceArray,
         group_potentials::CuDeviceArray, xprev::Real, yprev::Real, angle_change::Real,
         idx::Integer, group::Integer, is_translation::Bool, accepted::Bool)
     if accepted
