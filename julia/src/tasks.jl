@@ -48,6 +48,22 @@ struct GlobalParamRecorder{T <: Number} <: AbstractRecorder
     end
 end
 
+mutable struct NPTMover <: AbstractUpdater
+    pressure::Real
+    area_change::Function
+    cond::Function
+
+    accepted_moves::Integer
+    rejected_moves::Integer
+
+    function NPTMover(cond::Function, area_change::Union{Function, Real}, pressure::Real)
+        if isa(area_change, Real)
+            area_change = sim -> area_change
+        end
+        new(pressure, area_change, cond, 0, 0)
+    end
+end
+
 mutable struct ForcefulCompressor <: AbstractUpdater
     target_boxsize::Tuple{<:Real, <:Real}
     cond::Function

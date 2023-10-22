@@ -20,28 +20,56 @@ function update!(sim::HPMCSimulation, compressor::ForcefulCompressor)
         if compressor.reached_target
             set_complete_flag!(sim, compressor)
         else
-            pos_scale, lxold, lyold = apply_compression!(sim, compressor)
+            pos_scale, lxnew, lynew, lxold, lyold = apply_compression!(sim, compressor)
+            old_cell_list = sim.cell_list
             if sim.gpu
-                new_cell_list = CuCellList(sim.particles, sim.cell_list.shift,
+                sim.cell_list = CuCellList(sim.particles, sim.cell_list.shift,
                     maxwidth=minimum(pos_scale)*get_maxwidth(sim.particles))
                 violations = count_violations_gpu(sim.particles, sim.constraints)
             else
-                new_cell_list = SeqCellList(sim.particles)
+                sim.cell_list = SeqCellList(sim.particles)
                 violations = count_violations(sim.particles, sim.constraints)
             end
-            if violations + count_overlaps(sim.particles, new_cell_list) > (
+            if violations + count_overlaps(sim.particles, sim.cell_list) > (
                     compressor.max_overlap_fraction * count(sim.particles))
                 CUDA.@allowscalar sim.particles.boxsize[1], sim.particles.boxsize[2] = (
                     lxold, lyold)
                 sim.particles.centers ./= pos_scale
+                sim.cell_list = old_cell_list
             else
-                sim.cell_list = new_cell_list
-                CUDA.allowscalar() do
-                    if (sim.particles.boxsize[1] == compressor.target_boxsize[1]
-                            && sim.particles.boxsize[2] == compressor.target_boxsize[2])
-                        compressor.reached_target = true
-                    end
+                if (lxnew == compressor.target_boxsize[1]
+                        && lynew == compressor.target_boxsize[2])
+                    compressor.reached_target = true
                 end
+            end
+        end
+    end
+end
+
+function update!(sim::HPMCSimulation, npt::NPTMover)
+    if npt.cond(sim.timestep)
+        if !isnothing(sim.potential) || !isnothing(sim.pairpotential)
+            oldpotential = sum(sim.particle_potentials)
+        end
+        CUDA.@allowscalar lxold, lyold = sim.particles.boxsize
+        old_area = lxold * lyold
+        old_cell_list, scale, new_area, violates = propose_npt_move!(
+            sim, npt, lxold, lyold, old_area)
+        if violates || (isnothing(sim.pairpotential)
+                        && has_overlap(sim.particles, sim.cell_list))
+            reject_npt_move(sim, npt, old_cell_list, scale, lxold, lyold)
+        else
+            metropolis_factor = sim.beta * npt.pressure * (new_area - old_area)
+            if !isnothing(sim.potential) || !isnothing(sim.pairpotential)
+                calculate_potentials!(sim.particles, sim.cell_list,
+                    sim.particle_potentials, sim.potential, sim.pairpotential)
+                newpotential = sum(sim.particle_potentials)
+                metropolis_factor += sim.beta * (newpotential - oldpotential)
+            end
+            if rand() < exp(-metropolis_factor)
+                npt.accepted_moves += 1
+            else
+                reject_npt_move(sim, npt, old_cell_list, scale, lxold, lyold)
             end
         end
     end
@@ -80,7 +108,8 @@ end
     tuner.prev_rejected_rotations = sim.rejected_rotations
 end
 
-@inline function get_force_compress_dims(sim::HPMCSimulation, compressor::ForcefulCompressor)
+@inline function get_force_compress_dims(
+        sim::HPMCSimulation, compressor::ForcefulCompressor)
     CUDA.allowscalar() do
         scale_factor = max(compressor.minscale,
             1.0 - sim.move_radius / (2 * sim.particles.radius))
@@ -126,9 +155,39 @@ end
 @inline function apply_compression!(sim::HPMCSimulation, compressor::ForcefulCompressor)
     lxnew, lynew = get_force_compress_dims(sim, compressor)
     CUDA.@allowscalar lxold, lyold = sim.particles.boxsize
-    
     CUDA.@allowscalar sim.particles.boxsize[1], sim.particles.boxsize[2] = lxnew, lynew
     pos_scale = (lxnew / lxold, lynew / lyold)
     sim.particles.centers .*= pos_scale
-    return pos_scale, lxold, lyold
+    return pos_scale, lxnew, lynew, lxold, lyold
+end
+
+@inline function propose_npt_move!(
+        sim::HPMCSimulation, npt::NPTMover, lxold::Real, lyold::Real, old_area::Real)
+    new_area = old_area + rand() * npt.area_change(sim)
+    lxnew = √(lxold / lyold * new_area)
+    lynew = lyold / lxold * lxnew
+    CUDA.@allowscalar sim.particles.boxsize[1], sim.particles.boxsize[2] = lxnew, lynew
+    old_cell_list = sim.cell_list
+    if sim.gpu
+        scale = CuArray([lxnew / lxold, lynew / lyold])
+        sim.particles.centers .*= scale
+        sim.cell_list = CuCellList(sim.particles, sim.cell_list.shift,
+            maxwidth=minimum(pos_scale)*get_maxwidth(sim.particles))
+        violates = count_violations_gpu(sim.particles, sim.constraints) > 0
+    else
+        scale = (lxnew / lxold, lynew / lyold)
+        sim.particles.centers .*= scale
+        sim.cell_list = SeqCellList(sim.particles)
+        violates = has_violation(sim.particles, sim.constraints)
+    end
+    return old_cell_list, scale, new_area, violates
+end
+
+@inline function reject_npt_move!(sim::HPMCSimulation, npt::NPTMover,
+        old_cell_list::CellList, scale::Union{AbstractVector, Tuple{<:Real, <:Real}},
+        lxold::Real, lyold::Real)
+    sim.cell_list = old_cell_list
+    sim.particles.centers ./= scale
+    CUDA.@allowscalar sim.particles.boxsize[1], sim.particles.boxsize[2] = lxold, lyold
+    npt.rejected_moves += 1
 end
