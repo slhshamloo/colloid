@@ -57,10 +57,8 @@ mutable struct NPTMover <: AbstractUpdater
     rejected_moves::Integer
 
     function NPTMover(cond::Function, area_change::Union{Function, Real}, pressure::Real)
-        if isa(area_change, Real)
-            area_change = sim -> area_change
-        end
-        new(pressure, area_change, cond, 0, 0)
+        area_change_func = isa(area_change, Real) ? sim -> area_change : area_change
+        new(pressure, area_change_func, cond, 0, 0)
     end
 end
 

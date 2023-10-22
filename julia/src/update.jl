@@ -57,7 +57,7 @@ function update!(sim::HPMCSimulation, npt::NPTMover)
             sim, npt, lxold, lyold, old_area)
         if violates || (isnothing(sim.pairpotential)
                         && has_overlap(sim.particles, sim.cell_list))
-            reject_npt_move(sim, npt, old_cell_list, scale, lxold, lyold)
+            reject_npt_move!(sim, npt, old_cell_list, scale, lxold, lyold)
         else
             metropolis_factor = sim.beta * npt.pressure * (new_area - old_area)
             if !isnothing(sim.potential) || !isnothing(sim.pairpotential)
@@ -69,7 +69,7 @@ function update!(sim::HPMCSimulation, npt::NPTMover)
             if rand() < exp(-metropolis_factor)
                 npt.accepted_moves += 1
             else
-                reject_npt_move(sim, npt, old_cell_list, scale, lxold, lyold)
+                reject_npt_move!(sim, npt, old_cell_list, scale, lxold, lyold)
             end
         end
     end
@@ -163,19 +163,19 @@ end
 
 @inline function propose_npt_move!(
         sim::HPMCSimulation, npt::NPTMover, lxold::Real, lyold::Real, old_area::Real)
-    new_area = old_area + rand() * npt.area_change(sim)
+    new_area = old_area + 2 * (rand() - 0.5) * npt.area_change(sim)
     lxnew = √(lxold / lyold * new_area)
     lynew = lyold / lxold * lxnew
     CUDA.@allowscalar sim.particles.boxsize[1], sim.particles.boxsize[2] = lxnew, lynew
     old_cell_list = sim.cell_list
+    scale = (lxnew / lxold, lynew / lyold)
     if sim.gpu
+        sim.cell_list = CuCellList(sim.particles, sim.cell_list.shift,
+            maxwidth=minimum(scale)*get_maxwidth(sim.particles))
         scale = CuArray([lxnew / lxold, lynew / lyold])
         sim.particles.centers .*= scale
-        sim.cell_list = CuCellList(sim.particles, sim.cell_list.shift,
-            maxwidth=minimum(pos_scale)*get_maxwidth(sim.particles))
         violates = count_violations_gpu(sim.particles, sim.constraints) > 0
     else
-        scale = (lxnew / lxold, lynew / lyold)
         sim.particles.centers .*= scale
         sim.cell_list = SeqCellList(sim.particles)
         violates = has_violation(sim.particles, sim.constraints)
