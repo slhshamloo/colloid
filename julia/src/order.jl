@@ -46,29 +46,29 @@ end
 function katic_order(particles::RegularPolygons, cell_list::CuCellList, k::Integer;
                      numtype::DataType = Float32)
     maxcount = maximum(cell_list.counts)
-    groucount = 9 * maxcount
-    groups_per_block = numthreads ÷ groucount
+    groupcount = 9 * maxcount
+    groups_per_block = numthreads ÷ groupcount
     numblocks = count(particles) ÷ groups_per_block + 1
     orders = CuArray(zeros(Complex{numtype}, count(particles)))
     @cuda(threads=numthreads, blocks=numblocks,
-          shmem = groups_per_block * (2 * groucount + k) * sizeof(numtype),
+          shmem = groups_per_block * (2 * groupcount + k) * sizeof(numtype),
           katic_order_parallel!(particles, cell_list, orders, k, maxcount,
-                                groucount, groups_per_block, numtype))
+                                groupcount, groups_per_block, numtype))
     return Vector(orders)
 end
 
 function katic_order_parallel!(particles::RegularPolygons, cell_list::CuCellList,
         orders::CuDeviceVector, k::Integer, maxcount::Integer,
-        groucount::Integer, groups_per_block::Integer, numtype::DataType)
-    active_threads = groups_per_block * groucount
-    shared_memory = CuDynamicSharedArray(numtype, groups_per_block * (2 * groucount + k))
+        groupcount::Integer, groups_per_block::Integer, numtype::DataType)
+    active_threads = groups_per_block * groupcount
+    shared_memory = CuDynamicSharedArray(numtype, groups_per_block * (2 * groupcount + k))
     group_r = @view shared_memory[1:active_threads]
     group_angle = @view shared_memory[
         active_threads+1:2*active_threads]
     neighbor_angle = @view shared_memory[2*active_threads+1:end]
 
     is_thread_active = threadIdx().x <= active_threads
-    group, thread = divrem(threadIdx().x - 1, groucount)
+    group, thread = divrem(threadIdx().x - 1, groupcount)
     group += 1
     if is_thread_active
         particle = (blockIdx().x - 1) * groups_per_block + group
@@ -85,7 +85,7 @@ function katic_order_parallel!(particles::RegularPolygons, cell_list::CuCellList
     CUDA.sync_threads()
 
     katic_partition_select!(group_r, group_angle, neighbor_angle, k,
-        group, thread, groucount, is_thread_active)
+        group, thread, groupcount, is_thread_active)
 
     if is_thread_active && thread == 0
         for iteridx in (group - 1) * k + 1 : group * k
@@ -126,17 +126,17 @@ end
 
 function katic_partition_select!(group_r::SubArray, group_angle::SubArray,
         neighbor_angle::SubArray, k::Integer, group::Integer, thread::Integer,
-        groucount::Integer, is_thread_active::Bool)
+        groupcount::Integer, is_thread_active::Bool)
     if is_thread_active
-        group_r = @view group_r[(group - 1) * groucount + 1 : group * groucount]
-        group_angle = @view group_angle[(group - 1) * groucount + 1 : group * groucount]
+        group_r = @view group_r[(group - 1) * groupcount + 1 : group * groupcount]
+        group_angle = @view group_angle[(group - 1) * groupcount + 1 : group * groupcount]
         neighbor_angle = @view neighbor_angle[(group - 1) * k + 1 : group * k]
         thread += 1
     end
     for selection in 1:k
         step = 1
-        while step < groucount
-            if is_thread_active && (thread - 1) % 2step == 0 && thread + step <= groucount
+        while step < groupcount
+            if is_thread_active && (thread - 1) % 2step == 0 && thread + step <= groupcount
                 if group_r[thread] > group_r[thread + step]
                     group_r[thread], group_r[thread + step] = group_r[thread + step],
                         group_r[thread]

@@ -9,15 +9,15 @@ function apply_step_gpu!(sim::HPMCSimulation)
 
     for sweep in 1:sweeps
         maxcount = maximum(sim.cell_list.counts)
-        groucount = 9 * maxcount + length(sim.constraints)
-        groups_per_block = numthreads ÷ groucount
+        groupcount = 9 * maxcount + length(sim.constraints)
+        groups_per_block = numthreads ÷ groupcount
         for color in shuffle(1:4)
             cellcount = getcellcount(sim.cell_list, color)
             numblocks = cellcount ÷ groups_per_block + 1
             @cuda(threads=numthreads, blocks=numblocks,
                   shmem = groups_per_block * (sizeof(Int32) + sizeof(sim.numtype)),
                   apply_parallel_step!(cusim, sim.cell_list, randnums, randchoices, accept,
-                                       color, sweep, maxcount, groucount, cellcount))
+                                       color, sweep, maxcount, groupcount, cellcount))
         end
         direction = ((1, 0), (-1, 0), (0, 1), (0, -1))[rand(1:4)]
         shift = (direction[2] == 0 ? sim.cell_list.width[1] : sim.cell_list.width[2]) * (
@@ -57,19 +57,19 @@ end
 
 function apply_parallel_step!(cusim::CuHPMCSim, cell_list::CuCellList, 
         randnums::CuDeviceArray, randchoices::CuDeviceArray, accept::CuDeviceArray,
-        color::Integer, sweep::Integer, maxcount::Integer, groucount::Integer,
+        color::Integer, sweep::Integer, maxcount::Integer, groupcount::Integer,
         cellcount::Integer)
     is_thread_active = true
-    groups_per_block = blockDim().x ÷ groucount
+    groups_per_block = blockDim().x ÷ groupcount
     idx = CuDynamicSharedArray(Int32, groups_per_block)
     group_potentials = CuDynamicSharedArray(eltype(cusim.particles.centers),
         groups_per_block, groups_per_block * sizeof(Int32))
 
-    if threadIdx().x > groups_per_block * groucount
+    if threadIdx().x > groups_per_block * groupcount
         is_thread_active = false
         group, thread, i, j = 0, 0, 0, 0
     else
-        group, thread = divrem(threadIdx().x - 1, groucount)
+        group, thread = divrem(threadIdx().x - 1, groupcount)
         group += 1
         cell = (blockIdx().x - 1) * groups_per_block + group
         if cell > cellcount
@@ -85,14 +85,14 @@ function apply_parallel_step!(cusim::CuHPMCSim, cell_list::CuCellList,
     end
 
     apply_parallel_move!(cusim, cell_list, randnums, randchoices, accept, idx,
-        group_potentials, groucount, maxcount, group, thread,
+        group_potentials, groupcount, maxcount, group, thread,
         sweep, i, j, is_thread_active)
     return
 end
 
 function apply_parallel_move!(cusim::CuHPMCSim, cell_list::CuCellList,
         randnums::CuDeviceArray, randchoices::CuDeviceArray, accept::CuDeviceArray,
-        idx::CuDeviceArray, group_potentials::CuDeviceArray, groucount::Integer,
+        idx::CuDeviceArray, group_potentials::CuDeviceArray, groupcount::Integer,
         maxcount::Integer, group::Integer, thread::Integer, sweep::Integer,
         i::Integer, j::Integer, is_thread_active::Bool)
     if is_thread_active && thread == 0
@@ -106,7 +106,7 @@ function apply_parallel_move!(cusim::CuHPMCSim, cell_list::CuCellList,
         checkoverlap!(cusim.particles, cell_list, cusim.constraints, idx, group_potentials,
                       maxcount, group, thread, i, j, is_thread_active)
         CUDA.sync_threads()
-    elseif groucount > 9 * maxcount
+    elseif groupcount > 9 * maxcount
         checkconstraint!(cusim.particles, cusim.constraints, idx, group_potentials,
                          maxcount, group, thread, is_thread_active)
         CUDA.sync_threads()
@@ -129,7 +129,8 @@ function apply_parallel_trial!(cusim::CuHPMCSim, cell_list::CuCellList,
         randnums::CuDeviceArray, randchoices::CuDeviceArray,
         idx::CuDeviceVector, group_potentials::CuDeviceArray,
         group::Integer, sweep::Integer, i::Integer, j::Integer)
-    xprev, yprev = zero(eltype(cusim.particles.centers)), zero(eltype(cusim.particles.centers))
+    xprev, yprev = (zero(eltype(cusim.particles.centers)),
+                    zero(eltype(cusim.particles.centers)))
     angle_change = zero(eltype(cusim.particles.angles))
     idx[group] = cell_list.cells[
         ceil(Int, randnums[1, i, j, sweep] * cell_list.counts[i, j]), i, j]
@@ -151,15 +152,17 @@ function apply_parallel_trial!(cusim::CuHPMCSim, cell_list::CuCellList,
     return xprev, yprev, angle_change
 end
 
-function checkoverlap!(particles::RegularPolygons, cell_list::CuCellList, constraints::RawConstraints,
-        idx::CuDeviceArray, group_potentials::CuDeviceArray, maxcount::Integer,
-        group::Integer, thread::Integer, i::Integer, j::Integer, is_thread_active::Bool)
+function checkoverlap!(particles::RegularPolygons, cell_list::CuCellList,
+        constraints::RawConstraints, idx::CuDeviceArray, group_potentials::CuDeviceArray,
+        maxcount::Integer, group::Integer, thread::Integer, i::Integer, j::Integer,
+        is_thread_active::Bool)
     passed_circumference_check, passed_fast_check = false, false
     if is_thread_active && iszero(group_potentials[group])
         constraint_index = thread - 9 * maxcount + 1
         if constraint_index > 0
             passed_fast_check, dist, distnorm = constraint_step_one!(
-                particles, constraints, group_potentials, idx[group], constraint_index, group)
+                particles, constraints, group_potentials,
+                idx[group], constraint_index, group)
         else
             passed_circumference_check, centerangle, neighbor, dist, distnorm = 
                 overlap_step_one!(particles, cell_list, group_potentials, idx[group],
@@ -170,13 +173,15 @@ function checkoverlap!(particles::RegularPolygons, cell_list::CuCellList, constr
 
     if is_thread_active && iszero(group_potentials[group])
         if passed_circumference_check
-            if (_is_vertex_overlapping(particles, idx[group], neighbor, distnorm, centerangle)
+            if (_is_vertex_overlapping(particles, idx[group], neighbor,
+                                       distnorm, centerangle)
                     || _is_vertex_overlapping(particles, neighbor, idx[group], distnorm,
                                               π + centerangle))
                 CUDA.@atomic group_potentials[group] += one(eltype(group_potentials))
             end
         elseif passed_fast_check
-            if slowcheck(particles, idx[group], dist, distnorm, constraints, constraint_index)
+            if slowcheck(particles, idx[group], dist, distnorm,
+                         constraints, constraint_index)
                 CUDA.@atomic group_potentials[group] += one(eltype(group_potentials))
             end
         end
@@ -191,14 +196,16 @@ function checkconstraint!(particles::RegularPolygons, constraints::RawConstraint
         constraint_index = thread - 9 * maxcount + 1
         if constraint_index > 0
             passed_fast_check, dist, distnorm = constraint_step_one!(
-                particles, constraints, group_potentials, idx[group], constraint_index, group)
+                particles, constraints, group_potentials,
+                idx[group], constraint_index, group)
         end
     end
     CUDA.sync_threads()
 
     if is_thread_active && group_potentials[group] == 0
         if passed_fast_check
-            if slowcheck(particles, idx[group], dist, distnorm, constraints, constraint_index)
+            if slowcheck(particles, idx[group], dist, distnorm,
+                         constraints, constraint_index)
                 CUDA.@atomic group_potentials[group] += one(eltype(group_potentials))
             end
         end

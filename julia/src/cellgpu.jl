@@ -73,15 +73,15 @@ end
 
 function count_overlaps(particles::RegularPolygons, cell_list::CuCellList)
     maxcount = maximum(cell_list.counts)
-    groucount = 9 * maxcount
-    groups_per_block = numthreads ÷ groucount
+    groupcount = 9 * maxcount
+    groups_per_block = numthreads ÷ groupcount
     numblocks = length(cell_list.counts) ÷ groups_per_block + 1
-    overlacounts = zero(cell_list.counts)
+    overlapcounts = zero(cell_list.counts)
     @cuda(threads=numthreads, blocks=numblocks,
           shmem = groups_per_block * sizeof(Int32),
-          count_overlaps_parallel!(particles, cell_list, overlacounts, maxcount,
-                                   groucount, groups_per_block))
-    return sum(overlacounts) ÷ 2
+          count_overlaps_parallel!(particles, cell_list, overlapcounts, maxcount,
+                                   groupcount, groups_per_block))
+    return sum(overlapcounts) ÷ 2
 end
 
 function has_overlap(particles::RegularPolygons, cell_list::CuCellList)
@@ -92,22 +92,22 @@ function calculate_potentials!(particles::RegularPolygons, cell_list::CuCellList
         potentials::CuArray, potential::Union{Function, Nothing},
         pairpotential::Union{Function, Nothing})
     maxcount = maximum(cell_list.counts)
-    groucount = 9 * maxcount
-    groups_per_block = numthreads ÷ groucount
+    groupcount = 9 * maxcount
+    groups_per_block = numthreads ÷ groupcount
     numblocks = length(cell_list.counts) ÷ groups_per_block + 1
     @cuda(threads=numthreads, blocks=numblocks,
           calculate_potentials_parallel!(particles, cell_list, potentials,
-          potential, pairpotential, maxcount, groucount, groups_per_block))
+          potential, pairpotential, maxcount, groupcount, groups_per_block))
 end
 
 function count_overlaps_parallel!(particles::RegularPolygons, cell_list::CuCellList,
-        overlacounts::CuDeviceMatrix, maxcount::Integer, groucount::Integer,
+        overlapcounts::CuDeviceMatrix, maxcount::Integer, groupcount::Integer,
         groups_per_block::Integer)
     group_overlaps = CuDynamicSharedArray(Int32, groups_per_block)
-    is_thread_active = threadIdx().x <= groups_per_block * groucount
+    is_thread_active = threadIdx().x <= groups_per_block * groupcount
 
     if is_thread_active
-        group, thread = divrem(threadIdx().x - 1, groucount)
+        group, thread = divrem(threadIdx().x - 1, groupcount)
         group += 1
         if thread == 0
             group_overlaps[group] = 0
@@ -130,7 +130,7 @@ function count_overlaps_parallel!(particles::RegularPolygons, cell_list::CuCellL
     CUDA.sync_threads()
 
     if is_thread_active && thread == 0
-        overlacounts[i, j] = group_overlaps[group]
+        overlapcounts[i, j] = group_overlaps[group]
     end
     return
 end
@@ -158,10 +158,10 @@ end
 function calculate_potentials_parallel!(particles::RegularPolygons, cell_list::CuCellList,
         potentials::CuDeviceArray, potential::Union{Function, Nothing},
         pairpotential::Union{Function, Nothing}, maxcount::Integer,
-        groucount::Integer, groups_per_block::Integer)
-    is_thread_active = threadIdx().x <= groups_per_block * groucount
+        groupcount::Integer, groups_per_block::Integer)
+    is_thread_active = threadIdx().x <= groups_per_block * groupcount
     if is_thread_active
-        group, thread = divrem(threadIdx().x - 1, groucount)
+        group, thread = divrem(threadIdx().x - 1, groupcount)
         group += 1
     end
     CUDA.sync_threads()
