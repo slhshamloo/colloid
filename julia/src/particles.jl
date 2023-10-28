@@ -29,8 +29,8 @@ function RegularPolygons{T}(sidenum::Integer, radius::Real, boxsize::Tuple{<:Rea
         sidenum, radius, bisector, boxsize, centers, angles)
 end
 
-function RegularPolygons{T}(count::Integer, sidenum::Integer, radius::Real,
-        boxsize::Tuple{<:Real, <:Real}; gpu=false) where {T<:Real}
+function RegularPolygons{T}(sidenum::Integer, radius::Real,
+        boxsize::Tuple{<:Real, <:Real}, count::Integer; gpu=false) where {T<:Real}
     bisector = radius * cos(π / sidenum)
 
     if gpu

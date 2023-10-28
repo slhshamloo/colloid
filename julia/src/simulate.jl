@@ -36,10 +36,10 @@ function HPMCSimulation(count::Integer, sidenum::Integer, radius::Real,
     end
     if gpu
         CUDA.seed!(seed)
-        particles = RegularPolygons{numtype}(count, sidenum, radius, boxsize; gpu=true)
+        particles = RegularPolygons{numtype}(sidenum, radius, boxsize, count; gpu=true)
     else
         Random.seed!(seed)
-        particles = RegularPolygons{numtype}(count, sidenum, radius, boxsize)
+        particles = RegularPolygons{numtype}(sidenum, radius, boxsize, count)
     end
     if !isnothing(potential) || !isnothing(pairpotential)
         particle_potentials = zeros(numtype, count(particles))
