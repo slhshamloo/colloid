@@ -48,6 +48,9 @@ end
 
 function update!(sim::HPMCSimulation, npt::NPTMover)
     if npt.cond(sim.timestep)
+        if isnothing(sim.pairpotential)
+            old_overlaps = count_overlaps(sim.particles, sim.cell_list)
+        end
         if !isnothing(sim.potential) || !isnothing(sim.pairpotential)
             oldpotential = sum(sim.particle_potentials)
         end
@@ -56,7 +59,7 @@ function update!(sim::HPMCSimulation, npt::NPTMover)
         old_cell_list, scale, new_area, violates = propose_npt_move!(
             sim, npt, lxold, lyold, old_area)
         if violates || (isnothing(sim.pairpotential)
-                        && has_overlap(sim.particles, sim.cell_list))
+                        && count_overlaps(sim.particles, sim.cell_list) > old_overlaps)
             reject_npt_move!(sim, npt, old_cell_list, scale, lxold, lyold)
         else
             metropolis_factor = sim.beta * npt.pressure * (new_area - old_area)
