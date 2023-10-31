@@ -44,9 +44,11 @@ Adapt.@adapt_structure CuCellList
         / width[2]), gridsize[2]) + 1)
 end
 
-@inline get_cell_list_indices(particles::RegularPolygons, cell_list::CuCellList, idx::Integer) =
+@inline function get_cell_list_indices(
+        particles::RegularPolygons, cell_list::CuCellList, idx::Integer)
     get_cell_list_indices(particles, size(cell_list.counts), cell_list.width,
                           cell_list.shift[1], cell_list.shift[2], idx)
+end
 
 function build_cells_parallel!(particles::RegularPolygons, cells::CuDeviceArray,
         counts::CuDeviceArray, width::NTuple{2, <:Real}, xshift::Real, yshift::Real)
@@ -67,7 +69,7 @@ function shift_cells!(particles::RegularPolygons, cell_list::CuCellList,
         cell_list.counts .= 0
         @cuda(threads=numthreads, blocks=count(particles)÷numthreads+1,
             build_cells_parallel!(particles, cell_list.cells, cell_list.counts,
-                                  cell_list.width, cell_list.shift[1], cell_list.shift[2]))
+                cell_list.width, cell_list.shift[1], cell_list.shift[2]))
     end
 end
 
@@ -76,12 +78,12 @@ function count_overlaps(particles::RegularPolygons, cell_list::CuCellList)
     groupcount = 9 * maxcount
     groups_per_block = numthreads ÷ groupcount
     numblocks = length(cell_list.counts) ÷ groups_per_block + 1
-    overlapcounts = zero(cell_list.counts)
+    overlapcount = CUDA.zeros(Int32)
     @cuda(threads=numthreads, blocks=numblocks,
-          shmem = groups_per_block * sizeof(Int32),
-          count_overlaps_parallel!(particles, cell_list, overlapcounts, maxcount,
+          shmem = groups_per_block * groupcount * sizeof(Int32),
+          count_overlaps_parallel!(particles, cell_list, overlapcount, maxcount,
                                    groupcount, groups_per_block))
-    return sum(overlapcounts) ÷ 2
+    return CUDA.@allowscalar overlapcount[]
 end
 
 function has_overlap(particles::RegularPolygons, cell_list::CuCellList)
@@ -101,57 +103,60 @@ function calculate_potentials!(particles::RegularPolygons, cell_list::CuCellList
 end
 
 function count_overlaps_parallel!(particles::RegularPolygons, cell_list::CuCellList,
-        overlapcounts::CuDeviceMatrix, maxcount::Integer, groupcount::Integer,
+        overlapcount::CuDeviceArray, maxcount::Integer, groupcount::Integer,
         groups_per_block::Integer)
-    group_overlaps = CuDynamicSharedArray(Int32, groups_per_block)
-    is_thread_active = threadIdx().x <= groups_per_block * groupcount
+    block_overlaps = CuDynamicSharedArray(Int32, groupcount * groups_per_block)
 
-    if is_thread_active
+    if threadIdx().x <= length(block_overlaps)
         group, thread = divrem(threadIdx().x - 1, groupcount)
         group += 1
-        if thread == 0
-            group_overlaps[group] = 0
-        end
-    end
-    CUDA.sync_threads()
-
-    if is_thread_active
         cell = (blockIdx().x - 1) * groups_per_block + group
         j, i = divrem(cell - 1, size(cell_list.counts, 1))
         i += 1
         j += 1
         if cell <= length(cell_list.counts) && cell_list.counts[i, j] != 0
-            count_neighbor_overlaps!(particles, cell_list, group_overlaps,
-                                     i, j, maxcount, group, thread)
+            block_overlaps[threadIdx().x] = count_neighbor_overlaps!(
+                particles, cell_list, i, j, maxcount, thread)
         else
-            is_thread_active = false
+            block_overlaps[threadIdx().x] = 0
         end
     end
     CUDA.sync_threads()
 
-    if is_thread_active && thread == 0
-        overlapcounts[i, j] = group_overlaps[group]
+    sum_parallel!(block_overlaps)
+    if threadIdx().x == 1
+        CUDA.@atomic overlapcount[] += block_overlaps[1]
     end
     return
 end
 
 function count_neighbor_overlaps!(particles::RegularPolygons, cell_list::CuCellList,
-        group_overlaps::CuDeviceVector, i::Integer, j::Integer, maxcount::Integer,
-        group::Integer, thread::Integer)
+        i::Integer, j::Integer, maxcount::Integer, thread::Integer)
+    thread_overlaps = zero(Int32)
     ineighbor, jneighbor, kneighbor = get_neighbor_indices(
         cell_list, thread, maxcount, i, j)
     if kneighbor <= cell_list.counts[ineighbor, jneighbor]
         neighbor = cell_list.cells[kneighbor, ineighbor, jneighbor]
-        overlap_count = 0
         for k in 1:cell_list.counts[i, j]
             idx = cell_list.cells[k, i, j]
             if idx != neighbor
                 if is_overlapping(particles, idx, neighbor)
-                    overlap_count += 1
+                    thread_overlaps += 1
                 end
             end
         end
-        CUDA.@atomic group_overlaps[group] += overlap_count
+    end
+    return thread_overlaps
+end
+
+function sum_parallel!(a::CuDeviceArray)
+    step = length(a) ÷ 2
+    while step != 0
+        if threadIdx().x <= step
+            a[threadIdx().x] += a[threadIdx().x + step]
+        end
+        CUDA.sync_threads()
+        step ÷= 2
     end
 end
 
