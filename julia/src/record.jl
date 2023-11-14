@@ -15,16 +15,17 @@ function record!(sim::HPMCSimulation, recorder::TrajectoryRecorder)
             push!(recorder.trajectory.times, sim.timestep)
         end
         if !isnothing(recorder.filepath)
-            Threads.@spawn recordfile!(sim, recorder, Array(sim.particles.centers),
-                Array(sim.particles.angles), Array(sim.particles.boxsize))
+            recordfile!(sim, recorder, sim.timestep,
+                Array(sim.particles.centers), Array(sim.particles.angles),
+                Array(sim.particles.boxsize))
         end
     end
 end
 
-function recordfile!(sim::HPMCSimulation, recorder::TrajectoryRecorder,
+function recordfile!(sim::HPMCSimulation, recorder::TrajectoryRecorder, timestep::Integer,
         centers::Matrix{<:Real}, angles::Vector{<:Real}, boxsize::Vector{<:Real})
-    frame = Threads.@atomic recorder.filecounter += 1
-    if frame == 1
+    recorder.filecounter += 1
+    if recorder.filecounter == 1
         mkdir(recorder.filepath)
         jldopen(recorder.filepath * "/constants.jld2", "a+") do file
             file["seed"] = sim.seed
@@ -32,11 +33,11 @@ function recordfile!(sim::HPMCSimulation, recorder::TrajectoryRecorder,
             file["radius"] = sim.particles.radius
         end
     end
-    jldopen(recorder.filepath * "/$frame.jld2", "a+") do file
-        file["time"] = sim.timestep
-        file["centers"] = Array(sim.particles.centers)
-        file["angles"] = Array(sim.particles.angles)
-        file["boxsize"] = Array(sim.particles.boxsize)
+    jldopen(recorder.filepath * "/$(recorder.filecounter).jld2", "a+") do file
+        file["time"] = timestep
+        file["centers"] = centers
+        file["angles"] = angles
+        file["boxsize"] = boxsize
     end
 end
 
