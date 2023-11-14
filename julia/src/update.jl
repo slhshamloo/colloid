@@ -15,6 +15,29 @@ function update!(sim::HPMCSimulation, tuner::MoveSizeTuner)
     end
 end
 
+function update!(sim::HPMCSimulation, tuner::NPTTuner)
+    if tuner.cond(sim.timestep)
+        acc_moves = tuner.npt_mover.accepted_moves - tuner.prev_accepted_moves
+        rej_moves = tuner.npt_mover.rejected_moves - tuner.prev_rejected_moves
+        acceptance_rate = acc_moves / (acc_moves + rej_moves)
+        if abs(acceptance_rate - tuner.target_acceptance_rate) <= tuner.tollerance
+            if tuner.prev_tuned
+                tuner.tuned = true
+            else
+                tuner.prev_tuned = true
+            end
+        end
+
+        tuner.npt_mover.area_change = min(tuner.max_move_size,
+            min(tuner.maxscale, (acceptance_rate + tuner.gamma)
+                / (tuner.target_acceptance_rate + tuner.gamma))
+                * tuner.npt_mover.area_change)
+
+        tuner.prev_accepted_moves = tuner.npt_mover.accepted_moves
+        tuner.prev_rejected_moves = tuner.npt_mover.rejected_moves
+    end
+end
+
 function update!(sim::HPMCSimulation, compressor::ForcefulCompressor)
     if needs_compression(sim, compressor)
         if compressor.reached_target
@@ -166,7 +189,7 @@ end
 
 @inline function propose_npt_move!(
         sim::HPMCSimulation, npt::NPTMover, lxold::Real, lyold::Real, old_area::Real)
-    new_area = old_area + 2 * (rand() - 0.5) * npt.area_change(sim)
+    new_area = old_area + 2 * (rand() - 0.5) * npt.area_change
     lxnew = √(lxold / lyold * new_area)
     lynew = lyold / lxold * lxnew
     CUDA.@allowscalar sim.particles.boxsize[1], sim.particles.boxsize[2] = lxnew, lynew
