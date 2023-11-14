@@ -1,7 +1,8 @@
 function update!(sim::HPMCSimulation, tuner::MoveSizeTuner)
     if tuner.cond(sim.timestep)
-        translation_acceptance, rotation_acceptance = get_new_acceptance_rates(sim, tuner)
-        set_tuner_flags!(tuner, translation_acceptance, rotation_acceptance)
+        translation_acceptance, rotation_acceptance, npt_acceptance =
+            get_new_acceptance_rates(sim, tuner)
+        set_tuner_flags!(tuner, translation_acceptance, rotation_acceptance, npt_acceptance)
 
         new_move_radius = min(tuner.max_move_radius,
             min(tuner.maxscale, (translation_acceptance + tuner.gamma)
@@ -9,9 +10,18 @@ function update!(sim::HPMCSimulation, tuner::MoveSizeTuner)
         new_rotation_span = min(tuner.max_rotation_span,
             min(tuner.maxscale, (rotation_acceptance + tuner.gamma)
                 / (tuner.target_acceptance_rate + tuner.gamma)) * sim.rotation_span)
+        if !isnothing(tuner.npt_mover)
+            new_area_change = min(tuner.max_area_change,
+                min(tuner.maxscale, (npt_acceptance + tuner.gamma)
+                    / (tuner.target_acceptance_rate + tuner.gamma))
+                    * tuner.npt_mover.area_change)
+        end
 
         set_tuner_prev_values!(sim, tuner)
         sim.move_radius, sim.rotation_span = new_move_radius, new_rotation_span
+        if !isnothing(tuner.npt_mover)
+            tuner.npt_mover.area_change = new_area_change
+        end
     end
 end
 
@@ -106,11 +116,18 @@ end
     rej_trans = sim.rejected_translations - tuner.prev_rejected_translations
     acc_rot = sim.accepted_rotations - tuner.prev_accepted_rotations
     rej_rot = sim.rejected_rotations - tuner.prev_rejected_rotations
-    return acc_trans / (acc_trans + rej_trans), acc_rot / (acc_rot + rej_rot)
+    if !isnothing(tuner.npt_mover)
+        acc_npt = tuner.npt_mover.accepted_moves - tuner.prev_accepted_npt
+        rej_npt = tuner.npt_mover.reject_moves - tuner.prev_rejected_npt
+        npt_rate = acc_npt / (acc_npt + rej_npt)
+    else
+        npt_rate = 0.0
+    end
+    return acc_trans / (acc_trans + rej_trans), acc_rot / (acc_rot + rej_rot), npt_rate
 end
 
-@inline function set_tuner_flags!(
-        tuner::MoveSizeTuner, translation_acceptance::Real, rotation_acceptance::Real)
+@inline function set_tuner_flags!(tuner::MoveSizeTuner,
+        translation_acceptance::Real, rotation_acceptance::Real, npt_acceptance::Real)
     if abs(translation_acceptance - tuner.target_acceptance_rate) <= tuner.tollerance
         if tuner.prev_translation_tuned
             tuner.translation_tuned = true
@@ -125,6 +142,15 @@ end
             tuner.prev_rotation_tuned = true
         end
     end
+    if !isnothing(tuner.npt_mover)
+        if abs(npt_acceptance - tuner.target_acceptance_rate) <= tuner.tollerance
+            if tuner.prev_npt_tuned
+                tuner.npt_tuned = true
+            else
+                tuner.prev_npt_tuned = true
+            end
+        end
+    end
 end
 
 @inline function set_tuner_prev_values!(sim::HPMCSimulation, tuner::MoveSizeTuner)
@@ -132,6 +158,10 @@ end
     tuner.prev_rejected_translations = sim.rejected_translations
     tuner.prev_accepted_rotations = sim.accepted_rotations
     tuner.prev_rejected_rotations = sim.rejected_rotations
+    if !isnothing(tuner.npt_mover)
+        tuner.prev_rejected_npt = tuner.npt_mover.rejected_moves
+        tuner.prev_rejected_npt = tuner.npt_mover.rejected_moves
+    end
 end
 
 @inline function get_force_compress_dims(
