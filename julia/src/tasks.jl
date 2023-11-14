@@ -50,15 +50,14 @@ end
 
 mutable struct NPTMover <: AbstractUpdater
     pressure::Real
-    area_change::Function
+    area_change::Real
     cond::Function
 
     accepted_moves::Integer
     rejected_moves::Integer
 
-    function NPTMover(cond::Function, area_change::Union{Function, Real}, pressure::Real)
-        area_change_func = isa(area_change, Real) ? sim -> area_change : area_change
-        new(pressure, area_change_func, cond, 0, 0)
+    function NPTMover(cond::Function, area_change::Real, pressure::Real)
+        new(pressure, area_change, cond, 0, 0)
     end
 end
 
@@ -80,9 +79,11 @@ end
 mutable struct MoveSizeTuner <: AbstractUpdater
     target_acceptance_rate::Real
     cond::Function
+    npt_mover::Union{NPTMover, Nothing}
 
     max_move_radius::Real
     max_rotation_span::Real
+    max_area_change::Real
 
     maxscale::Real
     gamma::Real
@@ -90,20 +91,25 @@ mutable struct MoveSizeTuner <: AbstractUpdater
 
     translation_tuned::Bool
     rotation_tuned::Bool
+    npt_tuned::Bool
 
     prev_translation_tuned::Bool
     prev_rotation_tuned::Bool
+    prev_npt_tuned::Bool
+
     prev_accepted_translations::Integer
     prev_rejected_translations::Integer
     prev_accepted_rotations::Integer
     prev_rejected_rotations::Integer
+    prev_accepted_npt::Integer
+    prev_rejected_npt::Integer
 
     function MoveSizeTuner(cond::Function, target_acceptance_rate::Real;
-                           max_move_radius::Real = Inf, max_rotation_span::Real = 2π,
-                           maxscale::Real = 2.0, gamma::Real = 1.0,
-                           tollerance::Real = 0.01)
-        new(target_acceptance_rate, cond, max_move_radius,
-            max_rotation_span, maxscale, gamma, tollerance,
-            false, false, false, false, 0, 0, 0, 0)
+            max_move_radius::Real = Inf, max_rotation_span::Real = 2π,
+            max_area_change::Real = 1.0, npt_mover::Union{NPTMover, Nothing} = nothing,
+            maxscale::Real = 2.0, gamma::Real = 1.0, tollerance::Real = 0.01)
+        new(target_acceptance_rate, cond, npt_mover, max_move_radius,
+            max_rotation_span, max_area_change, maxscale, gamma, tollerance,
+            false, false, false, false, false, false, 0, 0, 0, 0, 0, 0)
     end
 end
