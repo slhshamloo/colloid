@@ -26,6 +26,7 @@ function recordfile!(sim::HPMCSimulation, recorder::TrajectoryRecorder, timestep
         centers::Matrix{<:Real}, angles::Vector{<:Real}, boxsize::Vector{<:Real})
     recorder.filecounter += 1
     if recorder.filecounter == 1
+        rm(recorder.filepath, recursive=true, force=true)
         mkdir(recorder.filepath)
         jldopen(recorder.filepath * "/constants.jld2", "a+") do file
             file["seed"] = sim.seed
