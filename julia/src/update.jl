@@ -1,8 +1,7 @@
 function update!(sim::HPMCSimulation, tuner::MoveSizeTuner)
     if tuner.cond(sim.timestep)
-        translation_acceptance, rotation_acceptance, npt_acceptance =
-            get_new_acceptance_rates(sim, tuner)
-        set_tuner_flags!(tuner, translation_acceptance, rotation_acceptance, npt_acceptance)
+        translation_acceptance, rotation_acceptance = get_new_acceptance_rates(sim, tuner)
+        set_tuner_flags!(tuner, translation_acceptance, rotation_acceptance)
 
         new_move_radius = min(tuner.max_move_radius,
             min(tuner.maxscale, (translation_acceptance + tuner.gamma)
@@ -111,7 +110,7 @@ end
 end
 
 @inline function set_tuner_flags!(tuner::MoveSizeTuner,
-        translation_acceptance::Real, rotation_acceptance::Real, npt_acceptance::Real)
+        translation_acceptance::Real, rotation_acceptance::Real)
     if abs(translation_acceptance - tuner.target_acceptance_rate) <= tuner.tollerance
         if tuner.prev_translation_tuned
             tuner.translation_tuned = true
