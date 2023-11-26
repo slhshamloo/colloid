@@ -92,9 +92,6 @@ mutable struct MoveSizeTuner <: AbstractUpdater
     prev_translation_tuned::Bool
     prev_rotation_tuned::Bool
 
-    prev_translation_tuned::Bool
-    prev_rotation_tuned::Bool
-
     prev_accepted_translations::Integer
     prev_rejected_translations::Integer
     prev_accepted_rotations::Integer
