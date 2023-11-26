@@ -44,13 +44,13 @@ end
 
 function finalize!(recorder::TrajectoryRecorder)
     jldopen(recorder.filepath * ".jld2", "w+") do masterfile
-        jldopen(recorder.filepath * "/constants.jld") do constfile
+        jldopen(recorder.filepath * "/constants.jld2") do constfile
             masterfile["seed"] = constfile["seed"]
             masterfile["sidenum"] = constfile["seed"]
             masterfile["radius"] = constfile["seed"]
         end
         for frame in 1:recorder.filecounter
-            jldopen(recorder.filepath * ".jld2/$frame.jld") do framefile
+            jldopen(recorder.filepath * "/$frame.jld2") do framefile
                 masterfile["frame$frame/time"] = framefile["time"]
                 masterfile["frame$frame/centers"] = framefile["centers"]
                 masterfile["frame$frame/angles"] = framefile["angles"]
