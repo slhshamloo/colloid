@@ -34,7 +34,7 @@ function _is_vertex_overlapping(particles::RegularPolygons, i::Integer, j::Integ
         (abs(distnorm * cos(normalangle))
             - particles.radius * cos(diffangle) <= particles.bisector)
         && (abs(distnorm * cos(2π / particles.sidenum - abs(normalangle)))
-            - particles.radius * cos(2π / particles.sidenum - diffangle)
+            - abs(particles.radius * cos(2π / particles.sidenum - diffangle))
             <= particles.bisector)
     )
 end
