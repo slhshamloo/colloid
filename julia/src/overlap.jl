@@ -13,8 +13,8 @@ function is_overlapping(particles::RegularPolygons, i::Integer, j::Integer)
 end
 
 @inline function _overlap_range(particles::RegularPolygons, i::Integer, j::Integer)
-    dist = (particles.centers[1, i] - particles.centers[1, j],
-            particles.centers[2, i] - particles.centers[2, j])
+    dist = (particles.centers[1, j] - particles.centers[1, i],
+            particles.centers[2, j] - particles.centers[2, i])
     dist = (dist[1] - dist[1] ÷ (particles.boxsize[1]/2) * particles.boxsize[1],
             dist[2] - dist[2] ÷ (particles.boxsize[2]/2) * particles.boxsize[2])
     distnorm = √(dist[1]^2 + dist[2]^2)
@@ -34,7 +34,8 @@ function _is_vertex_overlapping(particles::RegularPolygons, i::Integer, j::Integ
         (abs(distnorm * cos(normalangle))
             - particles.radius * cos(diffangle) <= particles.bisector)
         && (abs(distnorm * cos(2π / particles.sidenum - abs(normalangle)))
-            - particles.radius * cos(2π / particles.sidenum - diffangle) <= particles.bisector)
+            - particles.radius * cos(2π / particles.sidenum - diffangle)
+            <= particles.bisector)
     )
 end
 
