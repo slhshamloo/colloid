@@ -1,5 +1,6 @@
 abstract type AbstractRecorder end
 abstract type AbstractUpdater end
+abstract type AbstractBoxUpdater <: AbstractUpdater end
 
 mutable struct TrajectoryRecorder <: AbstractRecorder
     filepath::Union{String, Nothing}
@@ -48,7 +49,7 @@ struct GlobalParamRecorder{T <: Number} <: AbstractRecorder
     end
 end
 
-mutable struct NPTMover <: AbstractUpdater
+mutable struct AreaUpdater <: AbstractBoxUpdater
     pressure::Real
     area_change::Real
     cond::Function
@@ -56,8 +57,24 @@ mutable struct NPTMover <: AbstractUpdater
     accepted_moves::Integer
     rejected_moves::Integer
 
-    function NPTMover(cond::Function, area_change::Real, pressure::Real)
+    function AreaUpdater(cond::Function, pressure::Real, area_change::Real)
         new(pressure, area_change, cond, 0, 0)
+    end
+end
+
+mutable struct BoxMover <: AbstractBoxUpdater
+    pressure::Real
+    xchange::Real
+    ychange::Real
+    cond::Function
+
+    accepted_xmoves::Integer
+    rejected_xmoves::Integer
+    accepted_ymoves::Integer
+    rejected_ymoves::Integer
+
+    function BoxMover(cond::Function, pressure::Real, xchange::Real, ychange::Real)
+        new(pressure, xchange, ychange, cond, 0, 0, 0, 0)
     end
 end
 
@@ -105,11 +122,11 @@ mutable struct MoveSizeTuner <: AbstractUpdater
     end
 end
 
-mutable struct NPTTuner <: AbstractUpdater
+mutable struct AreaUpdateTuner <: AbstractUpdater
     target_acceptance_rate::Real
     cond::Function
 
-    npt_mover::NPTMover
+    area_updater::AreaUpdater
     max_move_size::Real
 
     maxscale::Real
@@ -122,10 +139,40 @@ mutable struct NPTTuner <: AbstractUpdater
     prev_accepted_moves::Integer
     prev_rejected_moves::Integer
 
-    function NPTTuner(cond::Function, target_acceptance_rate::Real,
-            npt_mover::NPTMover; max_move_size::Real = 10.0, maxscale::Real = 2.0,
+    function AreaUpdateTuner(cond::Function, target_acceptance_rate::Real,
+            area_updater::AreaUpdater; max_move_size::Real = 10.0, maxscale::Real = 2.0,
             gamma::Real = 1.0, tollerance::Real = 0.01)
-        new(target_acceptance_rate, cond, npt_mover, max_move_size, maxscale,
+        new(target_acceptance_rate, cond, area_updater, max_move_size, maxscale,
             gamma, tollerance, false, false, 0, 0)
+    end
+end
+
+mutable struct BoxMoveTuner <: AbstractUpdater
+    target_acceptance_rate::Real
+    cond::Function
+
+    box_mover::BoxMover
+    max_xchange::Real
+    max_ychange::Real
+
+    maxscale::Real
+    gamma::Real
+    tollerance::Real
+
+    xtuned::Bool
+    ytuned::Bool
+    prev_xtuned::Bool
+    prev_ytuned::Bool
+
+    prev_accepted_xmoves::Integer
+    prev_rejected_xmoves::Integer
+    prev_accepted_ymoves::Integer
+    prev_rejected_ymoves::Integer
+
+    function BoxMoveTuner(cond::Function, target_acceptance_rate::Real,
+            box_mover::BoxMover; max_xchange::Real = 1.0, max_ychange::Real = 1.0,
+            maxscale::Real = 2.0, gamma::Real = 1.0, tollerance::Real = 0.01)
+        new(target_acceptance_rate, cond, box_mover, max_xchange, max_ychange,
+            maxscale, gamma, tollerance, false, false, false, false, 0, 0, 0, 0)
     end
 end

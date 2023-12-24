@@ -15,10 +15,25 @@ function update!(sim::HPMCSimulation, tuner::MoveSizeTuner)
     end
 end
 
-function update!(sim::HPMCSimulation, tuner::NPTTuner)
+function update!(sim::HPMCSimulation, tuner::BoxMoveTuner)
     if tuner.cond(sim.timestep)
-        acc_moves = tuner.npt_mover.accepted_moves - tuner.prev_accepted_moves
-        rej_moves = tuner.npt_mover.rejected_moves - tuner.prev_rejected_moves
+        x_acceptance, y_acceptance = get_new_acceptance_rates(tuner)
+        set_tuner_flags!(tuner, x_acceptance, y_acceptance)
+
+        tuner.box_mover.xchange = min(tuner.max_xchange,
+            min(tuner.maxscale, (x_acceptance + tuner.gamma)
+                / (tuner.target_acceptance_rate + tuner.gamma)) * tuner.box_mover.xchange)
+        tuner.box_mover.ychange = min(tuner.max_ychange,
+            min(tuner.maxscale, (y_acceptance + tuner.gamma)
+                / (tuner.target_acceptance_rate + tuner.gamma)) * tuner.box_mover.ychange)
+        set_tuner_prev_values!(tuner)
+    end
+end
+
+function update!(sim::HPMCSimulation, tuner::AreaUpdateTuner)
+    if tuner.cond(sim.timestep)
+        acc_moves = tuner.area_updater.accepted_moves - tuner.prev_accepted_moves
+        rej_moves = tuner.area_updater.rejected_moves - tuner.prev_rejected_moves
         acceptance_rate = acc_moves / (acc_moves + rej_moves)
         if abs(acceptance_rate - tuner.target_acceptance_rate) <= tuner.tollerance
             if tuner.prev_tuned
@@ -28,13 +43,13 @@ function update!(sim::HPMCSimulation, tuner::NPTTuner)
             end
         end
 
-        tuner.npt_mover.area_change = min(tuner.max_move_size,
+        tuner.area_updater.area_change = min(tuner.max_move_size,
             min(tuner.maxscale, (acceptance_rate + tuner.gamma)
                 / (tuner.target_acceptance_rate + tuner.gamma))
-                * tuner.npt_mover.area_change)
+                * tuner.area_updater.area_change)
 
-        tuner.prev_accepted_moves = tuner.npt_mover.accepted_moves
-        tuner.prev_rejected_moves = tuner.npt_mover.rejected_moves
+        tuner.prev_accepted_moves = tuner.area_updater.accepted_moves
+        tuner.prev_rejected_moves = tuner.area_updater.rejected_moves
     end
 end
 
@@ -69,8 +84,8 @@ function update!(sim::HPMCSimulation, compressor::ForcefulCompressor)
     end
 end
 
-function update!(sim::HPMCSimulation, npt::NPTMover)
-    if npt.cond(sim.timestep)
+function update!(sim::HPMCSimulation, updater::AbstractBoxUpdater)
+    if updater.cond(sim.timestep)
         if isnothing(sim.pairpotential)
             old_overlaps = count_overlaps(sim.particles, sim.cell_list)
         end
@@ -78,14 +93,13 @@ function update!(sim::HPMCSimulation, npt::NPTMover)
             oldpotential = sum(sim.particle_potentials)
         end
         CUDA.@allowscalar lxold, lyold = sim.particles.boxsize
-        old_area = lxold * lyold
-        old_cell_list, scale, new_area, violates = propose_npt_move!(
-            sim, npt, lxold, lyold, old_area)
+        old_cell_list, scale, area_new, choice, violates = propose_box_update!(
+            sim, updater, lxold, lyold)
         if violates || (isnothing(sim.pairpotential)
                         && count_overlaps(sim.particles, sim.cell_list) > old_overlaps)
-            reject_npt_move!(sim, npt, old_cell_list, scale, lxold, lyold)
+            reject_box_update!(sim, updater, old_cell_list, scale, lxold, lyold, choice)
         else
-            metropolis_factor = sim.beta * npt.pressure * (new_area - old_area)
+            metropolis_factor = sim.beta * updater.pressure * (area_new - lxold * lyold)
             if !isnothing(sim.potential) || !isnothing(sim.pairpotential)
                 calculate_potentials!(sim.particles, sim.cell_list,
                     sim.particle_potentials, sim.potential, sim.pairpotential)
@@ -93,9 +107,9 @@ function update!(sim::HPMCSimulation, npt::NPTMover)
                 metropolis_factor += sim.beta * (newpotential - oldpotential)
             end
             if rand() < exp(-metropolis_factor)
-                npt.accepted_moves += 1
+                accept_box_update!(updater, choice)
             else
-                reject_npt_move!(sim, npt, old_cell_list, scale, lxold, lyold)
+                reject_box_update!(sim, updater, old_cell_list, scale, lxold, lyold, choice)
             end
         end
     end
@@ -107,6 +121,24 @@ end
     acc_rot = sim.accepted_rotations - tuner.prev_accepted_rotations
     rej_rot = sim.rejected_rotations - tuner.prev_rejected_rotations
     return acc_trans / (acc_trans + rej_trans), acc_rot / (acc_rot + rej_rot)
+end
+
+@inline function get_new_acceptance_rates(tuner::BoxMoveTuner)
+    xacc = tuner.box_mover.accepted_xmoves - tuner.prev_accepted_xmoves
+    xrej = tuner.box_mover.rejected_xmoves - tuner.prev_rejected_xmoves
+    yacc = tuner.box_mover.accepted_ymoves - tuner.prev_accepted_ymoves
+    yrej = tuner.box_mover.rejected_ymoves - tuner.prev_rejected_ymoves
+    if xacc + xrej == 0
+        xrate = 1.0
+    else
+        xrate = xacc / (xacc + xrej)
+    end
+    if yacc + yrej == 0
+        yrate = 1.0
+    else
+        yrate = yacc / (yacc + yrej)
+    end
+    return xrate, yrate
 end
 
 @inline function set_tuner_flags!(tuner::MoveSizeTuner,
@@ -127,11 +159,36 @@ end
     end
 end
 
+@inline function set_tuner_flags!(
+        tuner::BoxMoveTuner, x_acceptance::Real, y_acceptance::Real)
+    if abs(x_acceptance - tuner.target_acceptance_rate) <= tuner.tollerance
+        if tuner.prev_xtuned
+            tuner.xtuned = true
+        else
+            tuner.prev_xtuned = true
+        end
+    end
+    if abs(y_acceptance - tuner.target_acceptance_rate) <= tuner.tollerance
+        if tuner.prev_ytuned
+            tuner.ytuned = true
+        else
+            tuner.prev_ytuned = true
+        end
+    end
+end
+
 @inline function set_tuner_prev_values!(sim::HPMCSimulation, tuner::MoveSizeTuner)
     tuner.prev_accepted_translations = sim.accepted_translations
     tuner.prev_rejected_translations = sim.rejected_translations
     tuner.prev_accepted_rotations = sim.accepted_rotations
     tuner.prev_rejected_rotations = sim.rejected_rotations
+end
+
+@inline function set_tuner_prev_values!(tuner::BoxMoveTuner)
+    tuner.prev_accepted_xmoves = tuner.box_mover.accepted_xmoves
+    tuner.prev_rejected_xmoves = tuner.box_mover.rejected_xmoves
+    tuner.prev_accepted_ymoves = tuner.box_mover.accepted_ymoves
+    tuner.prev_rejected_ymoves = tuner.box_mover.rejected_ymoves
 end
 
 @inline function get_force_compress_dims(
@@ -187,11 +244,9 @@ end
     return pos_scale, lxnew, lynew, lxold, lyold
 end
 
-@inline function propose_npt_move!(
-        sim::HPMCSimulation, npt::NPTMover, lxold::Real, lyold::Real, old_area::Real)
-    new_area = old_area + 2 * (rand() - 0.5) * npt.area_change
-    lxnew = √(lxold / lyold * new_area)
-    lynew = lyold / lxold * lxnew
+function propose_box_update!(
+        sim::HPMCSimulation, updater::AbstractBoxUpdater, lxold::Real, lyold::Real)
+    lxnew, lynew, area_new, choice = get_new_dimensions(updater, lxold, lyold)
     CUDA.@allowscalar sim.particles.boxsize[1], sim.particles.boxsize[2] = lxnew, lynew
     old_cell_list = sim.cell_list
     scale = (lxnew / lxold, lynew / lyold)
@@ -206,14 +261,53 @@ end
         sim.cell_list = SeqCellList(sim.particles)
         violates = has_violation(sim.particles, sim.constraints)
     end
-    return old_cell_list, scale, new_area, violates
+    return old_cell_list, scale, area_new, choice, violates
 end
 
-@inline function reject_npt_move!(sim::HPMCSimulation, npt::NPTMover,
+@inline function get_new_dimensions(updater::AreaUpdater, lxold::Real, lyold::Real)
+    area_new = lxold * lyold + 2 * (rand() - 0.5) * updater.area_change
+    lxnew = √(lxold / lyold * area_new)
+    lynew = lyold / lxold * lxnew
+    return lxnew, lynew, area_new, true
+end
+
+@inline function get_new_dimensions(updater::BoxMover, lxold::Real, lyold::Real)
+    choice = rand(Bool)
+    if choice
+        lxnew = lxold + 2 * (rand() - 0.5) * updater.xchange
+        lynew = lyold
+    else
+        lxnew = lxold
+        lynew = lyold + 2 * (rand() - 0.5) * updater.ychange
+    end
+    return lxnew, lynew, lxnew * lynew, choice
+end
+
+@inline function accept_box_update!(updater::AbstractBoxUpdater, choice::Bool)
+    if isa(updater, AreaUpdater)
+        updater.accepted_moves += 1
+    elseif isa(updater, BoxMover)
+        if choice
+            updater.accepted_xmoves += 1
+        else
+            updater.accepted_ymoves += 1
+        end
+    end
+end
+
+@inline function reject_box_update!(sim::HPMCSimulation, updater::AbstractBoxUpdater,
         old_cell_list::CellList, scale::Union{AbstractVector, Tuple{<:Real, <:Real}},
-        lxold::Real, lyold::Real)
+        lxold::Real, lyold::Real, choice::Bool)
     sim.cell_list = old_cell_list
     sim.particles.centers ./= scale
     CUDA.@allowscalar sim.particles.boxsize[1], sim.particles.boxsize[2] = lxold, lyold
-    npt.rejected_moves += 1
+    if isa(updater, AreaUpdater)
+        updater.rejected_moves += 1
+    elseif isa(updater, BoxMover)
+        if choice
+            updater.rejected_xmoves += 1
+        else
+            updater.rejected_ymoves += 1
+        end
+    end
 end
