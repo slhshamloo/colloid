@@ -4,11 +4,13 @@ function record!(sim::HPMCSimulation, recorder::TrajectoryRecorder)
             if isnothing(recorder.trajectory)
                 recorder.trajectory = RegularPolygonsTrajectory(
                     sim.particles.sidenum, sim.particles.radius,
+                    Vector{eltype(sim.particles.boxshear)}(undef, 0),
                     Vector{Vector{eltype(sim.particles.boxsize)}}(undef, 0),
                     Vector{Matrix{eltype(sim.particles.centers)}}(undef, 0),
                     Vector{Vector{eltype(sim.particles.angles)}}(undef, 0),
                     Vector{typeof(sim.timestep)}(undef, 0))
             end
+            push!(recorder.trajectory.times, sim.particles.boxshear[])
             push!(recorder.trajectory.boxsizes, Array(sim.particles.boxsize))
             push!(recorder.trajectory.centers, Array(sim.particles.centers))
             push!(recorder.trajectory.angles, Array(sim.particles.angles))
@@ -17,13 +19,14 @@ function record!(sim::HPMCSimulation, recorder::TrajectoryRecorder)
         if !isnothing(recorder.filepath)
             recordfile!(sim, recorder, sim.timestep,
                 Array(sim.particles.centers), Array(sim.particles.angles),
-                Array(sim.particles.boxsize))
+                Array(sim.particles.boxsize), sim.particles.boxshear[])
         end
     end
 end
 
 function recordfile!(sim::HPMCSimulation, recorder::TrajectoryRecorder, timestep::Integer,
-        centers::Matrix{<:Real}, angles::Vector{<:Real}, boxsize::Vector{<:Real})
+        centers::Matrix{<:Real}, angles::Vector{<:Real},
+        boxsize::Vector{<:Real}, boxshear::Real)
     recorder.filecounter += 1
     if recorder.filecounter == 1
         rm(recorder.filepath, recursive=true, force=true)
@@ -39,6 +42,7 @@ function recordfile!(sim::HPMCSimulation, recorder::TrajectoryRecorder, timestep
         file["centers"] = centers
         file["angles"] = angles
         file["boxsize"] = boxsize
+        file["boxshear"] = boxshear
     end
 end
 
@@ -55,6 +59,7 @@ function finalize!(recorder::TrajectoryRecorder)
                 masterfile["frame$frame/centers"] = framefile["centers"]
                 masterfile["frame$frame/angles"] = framefile["angles"]
                 masterfile["frame$frame/boxsize"] = framefile["boxsize"]
+                masterfile["frame$frame/boxshear"] = framefile["boxshear"]
             end
         end
     end
