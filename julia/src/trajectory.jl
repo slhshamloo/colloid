@@ -100,7 +100,7 @@ end
 
 @inline Base.length(trajectory::RegularPolygonsTrajectory) = length(trajectory.times)
 
-@inline count(snapshot::RegularPolygonsSnapshot) = size(snapshot.centers, 2)
+@inline particlecount(snapshot::RegularPolygonsSnapshot) = size(snapshot.centers, 2)
 
-@inline area(snapshot::RegularPolygonsSnapshot) = (
+@inline particlearea(snapshot::RegularPolygonsSnapshot) = (
     0.5 * snapshot.sidenum * snapshot.radius^2 * sin(2π / snapshot.sidenum))

@@ -69,7 +69,7 @@ function update!(sim::HPMCSimulation, compressor::ForcefulCompressor)
                 violations = count_violations(sim.particles, sim.constraints)
             end
             if violations + count_overlaps(sim.particles, sim.cell_list) > (
-                    compressor.max_overlap_fraction * count(sim.particles))
+                    compressor.max_overlap_fraction * particlecount(sim.particles))
                 CUDA.@allowscalar sim.particles.boxsize[1], sim.particles.boxsize[2] = (
                     lxold, lyold)
                 sim.particles.centers ./= pos_scale

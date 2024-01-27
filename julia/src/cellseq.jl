@@ -11,7 +11,7 @@ struct SeqCellList <: CellList
 
         cells = [Int[] for i in 1:Int(particles.boxsize[1] ÷ width[1]),
                            j in 1:Int(particles.boxsize[2] ÷ width[2])]
-        for idx in 1:count(particles)
+        for idx in 1:particlecount(particles)
             i, j = get_cell_list_indices(particles, size(cells), width, idx)
             push!(cells[i, j], idx)
         end
@@ -22,11 +22,10 @@ end
 
 @inline function get_cell_list_indices(particles::RegularPolygons,
         gridsize::Tuple{<:Integer, <:Integer}, width::Tuple{<:Real, <:Real}, idx::Integer)
-    i = min(gridsize[1], Int((particles.centers[1, idx] + particles.boxsize[1] / 2)
-                             ÷ width[1] + 1))
+    shearshift = particles.boxsize[1] / 2 - particles.centers[2, idx] * particles.boxshear[]
+    i = min(gridsize[1], Int((particles.centers[1, idx] + shearshift) ÷ width[1] + 1))
     j = min(gridsize[2], Int((particles.centers[2, idx] + particles.boxsize[2] / 2)
                              ÷ width[2] + 1))
-
     return i, j
 end
 
@@ -176,7 +175,8 @@ function calculate_potentials!(particles::RegularPolygons, cell_list::SeqCellLis
         potential::Union{Nothing, Function}, pairpotential::Union{Nothing, Function},
         particle_potentials::Vector{<:Real})
     if !isnothing(potential)
-        map!(idx -> potential(particles, idx), particle_potentials, 1:count(particles))
+        map!(idx -> potential(particles, idx), particle_potentials,
+             1:particlecount(particles))
     else
         particle_potentials .= 0
     end

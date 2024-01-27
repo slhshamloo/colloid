@@ -1,7 +1,7 @@
 @recipe function p(snapshot::RegularPolygonsSnapshot)
     vertices = _build_vertices(snapshot.sidenum, snapshot.radius,
                                snapshot.centers, snapshot.angles)
-    for particle in 1:count(snapshot)
+    for particle in 1:particlecount(snapshot)
         @series begin
             seriestype := :shape
 
@@ -23,7 +23,7 @@ end
 @recipe function p(snapshot::RegularPolygonsSnapshot, colors::Vector{<:Colorant})
     vertices = _build_vertices(snapshot.sidenum, snapshot.radius,
                                snapshot.centers, snapshot.angles)
-    for particle in 1:count(snapshot)
+    for particle in 1:particlecount(snapshot)
         @series begin
             seriestype := :shape
 

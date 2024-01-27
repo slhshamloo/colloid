@@ -65,7 +65,7 @@ end
 function has_violation(particles::RegularPolygons,
         constraints::AbstractVector{<:AbstractConstraint})
     for constraint in constraints
-        if any(i -> is_violated(particles, constraint, i), 1:count(particles))
+        if any(i -> is_violated(particles, constraint, i), 1:particlecount(particles))
             return true
         end
     end
@@ -77,14 +77,14 @@ function count_violations(particles::RegularPolygons,
     violations = 0
     for constraint in constraints
         violations += count(i -> is_violated(particles, constraint, i),
-                            1:count(particles))
+                            1:particlecount(particles))
     end
     return violations
 end
 
 function count_violations_gpu(particles::RegularPolygons,
         constraints::AbstractVector{<:AbstractConstraint})
-    numblocks = count(particles) ÷ numthreads + 1
+    numblocks = particlecount(particles) ÷ numthreads + 1
     raw_constraints = build_raw_constraints(constraints, eltype(particles.centers))
     violation_counts = CuArray(zeros(Int32, numblocks))
     @cuda(threads=numthreads, blocks=numblocks, shmem = numthreads * sizeof(Int32),
@@ -99,7 +99,7 @@ function count_violations_parallel(particles::RegularPolygons, constraints::RawC
     blockviolations = CuDynamicSharedArray(Int32, blockDim().x)
     blockviolations[thread] = 0
 
-    if tid <= count(particles)
+    if tid <= particlecount(particles)
         for cidx in 1:length(constraints.typeids)
             if fullcheck(particles, tid, constraints, cidx)
                 blockviolations[thread] += 1

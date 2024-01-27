@@ -27,8 +27,9 @@ mutable struct HPMCSimulation{F<:AbstractFloat}
 end
 
 function HPMCSimulation(count::Integer, sidenum::Integer, radius::Real,
-        boxsize::Tuple{<:Real, <:Real}; seed::Integer = -1, gpu::Bool = false,
-        double::Bool = false, beta::Real = 1, potential::Union{Function, Nothing} = nothing,
+        boxsize::Tuple{<:Real, <:Real}; boxshear::Real = 0.0, seed::Integer = -1,
+        gpu::Bool = false, double::Bool = false, beta::Real = 1,
+        potential::Union{Function, Nothing} = nothing,
         pairpotential::Union{Function, Nothing} = nothing)
     numtype = double ? Float64 : Float32
     if seed == -1
@@ -36,13 +37,15 @@ function HPMCSimulation(count::Integer, sidenum::Integer, radius::Real,
     end
     if gpu
         CUDA.seed!(seed)
-        particles = RegularPolygons{numtype}(sidenum, radius, boxsize, count; gpu=true)
+        particles = RegularPolygons{numtype}(sidenum, radius, boxsize, count;
+                                             gpu=true, boxshear=boxshear)
     else
         Random.seed!(seed)
-        particles = RegularPolygons{numtype}(sidenum, radius, boxsize, count)
+        particles = RegularPolygons{numtype}(sidenum, radius, boxsize, count;
+                                             boxshear=boxshear)
     end
     if !isnothing(potential) || !isnothing(pairpotential)
-        particle_potentials = zeros(numtype, count(particles))
+        particle_potentials = zeros(numtype, particlecount(particles))
         if gpu
             particle_potentials = CuArray(particle_potentials)
         end
@@ -70,7 +73,7 @@ function HPMCSimulation(particles::RegularPolygons; seed::Integer = -1, gpu::Boo
         cell_list = SeqCellList(particles)
     end
     if !isnothing(potential) || !isnothing(pairpotential)
-        particle_potentials = zeros(numtype, count(particles))
+        particle_potentials = zeros(numtype, particlecount(particles))
         if gpu
             particle_potentials = CuArray(particle_potentials)
         end

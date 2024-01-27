@@ -8,7 +8,7 @@ struct CuCellList{T<:Real, A<:AbstractArray, M<:AbstractMatrix,
 end
 
 function CuCellList(particles::RegularPolygons, shift::AbstractArray = [0.0f0, 0.0f0];
-                    maxwidth::Real = 0.0f0, max_particle_per_cell=10)
+                    maxwidth::Real = 0.0f0, max_particle_per_cell=20)
     if iszero(maxwidth)
         maxwidth = get_maxwidth(particles)
     end
@@ -22,8 +22,9 @@ function CuCellList(particles::RegularPolygons, shift::AbstractArray = [0.0f0, 0
     cells = CuArray(cells)
     counts = CuArray(counts)
 
-    CUDA.@allowscalar @cuda(threads=numthreads, blocks=count(particles)÷numthreads+1,
-          build_cells_parallel!(particles, cells, counts, width, shift[1], shift[2]))
+    CUDA.@allowscalar @cuda(
+        threads=numthreads, blocks=particlecount(particles)÷numthreads+1,
+        build_cells_parallel!(particles, cells, counts, width, shift[1], shift[2]))
 
     shift = CuVector{eltype(particles.centers)}(shift)
     CuCellList{eltype(width), typeof(cells), typeof(counts), typeof(shift)}(
@@ -38,7 +39,8 @@ Adapt.@adapt_structure CuCellList
 @inline function get_cell_list_indices(particles::RegularPolygons,
         gridsize::Tuple{<:Integer, <:Integer}, width::Tuple{<:Real, <:Real},
         xshift::Real, yshift::Real, idx::Integer)
-    (mod(floor(Int, (particles.centers[1, idx] + particles.boxsize[1] / 2 - xshift)
+    shearshift = particles.boxsize[1] / 2 - particles.centers[2, idx] * particles.boxshear[]
+    (mod(floor(Int, (particles.centers[1, idx] + shearshift - xshift)
         / width[1]), gridsize[1]) + 1,
      mod(floor(Int, (particles.centers[2, idx] + particles.boxsize[2] / 2 - yshift)
         / width[2]), gridsize[2]) + 1)
@@ -53,7 +55,7 @@ end
 function build_cells_parallel!(particles::RegularPolygons, cells::CuDeviceArray,
         counts::CuDeviceArray, width::NTuple{2, <:Real}, xshift::Real, yshift::Real)
     idx = (blockIdx().x - 1) * blockDim().x + threadIdx().x
-    if idx <= count(particles)
+    if idx <= particlecount(particles)
         i, j = get_cell_list_indices(particles, size(counts), width, xshift, yshift, idx)
         cellidx = CUDA.@atomic counts[i, j] += 1
         cells[cellidx + 1, i, j] = idx
@@ -67,7 +69,7 @@ function shift_cells!(particles::RegularPolygons, cell_list::CuCellList,
         cell_list.shift[1] += direction[1] * shift
         cell_list.shift[2] += direction[2] * shift
         cell_list.counts .= 0
-        @cuda(threads=numthreads, blocks=count(particles)÷numthreads+1,
+        @cuda(threads=numthreads, blocks=particlecount(particles)÷numthreads+1,
             build_cells_parallel!(particles, cell_list.cells, cell_list.counts,
                 cell_list.width, cell_list.shift[1], cell_list.shift[2]))
     end

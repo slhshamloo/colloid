@@ -1,7 +1,7 @@
 module HPMC
 
 export HPMCSimulation, ForcefulCompressor, MoveSizeTuner, TrajectoryRecorder,
-    run!, build_configuration!, crystallize!, count, area, boxarea
+    run!, build_configuration!, crystallize!, paritclecount, particlearea, boxarea
 
 using CUDA
 using StaticArrays

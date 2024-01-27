@@ -32,7 +32,7 @@ function build_cusim(sim::HPMCSimulation)
     if !isnothing(sim.potential) || !isnothing(sim.pairpotential)
         if length(sim.particle_potentials) == 0
             sim.particle_potentials = CuArray(
-                zeros(sim.numtype, count(sim.particles)))
+                zeros(sim.numtype, particlecount(sim.particles)))
         else
             sim.particle_potentials .= 0
         end

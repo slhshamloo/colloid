@@ -1,8 +1,8 @@
 function apply_step_cpu!(sim::HPMCSimulation)
-    randchoices = rand(Bool, count(sim.particles))
+    randchoices = rand(Bool, particlecount(sim.particles))
     randnums = rand(sim.numtype,
         2 + Int(!isnothing(sim.potential) || !isnothing(sim.pairpotential)),
-        count(sim.particles))
+        particlecount(sim.particles))
     if !isnothing(sim.potential) || !isnothing(sim.pairpotential)
         if length(sim.particle_potentials) == 0
             sim.particle_potentials = zero(sim.particles.angles)
@@ -12,8 +12,8 @@ function apply_step_cpu!(sim::HPMCSimulation)
     end
     
     iter = (rand(Bool) ?
-        range(1, count(sim.particles))
-        : range(count(sim.particles), 1, step=-1)
+        range(1, particlecount(sim.particles))
+        : range(particcount(sim.particles), 1, step=-1)
     )
     for idx in iter
         if randchoices[idx]

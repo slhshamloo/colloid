@@ -8,7 +8,7 @@ end
 
 function katic_order(particles::RegularPolygons, cell_list::SeqCellList, k::Integer;
                      numtype::DataType = Float32)
-    orders = zeros(count(particles), Complex{numtype})
+    orders = zeros(particlecount(particles), Complex{numtype})
     for cell in CartesianIndices(cell_list.cells)
         i, j = Tuple(cell)
         for idx in cell_list.cells[i, j]
@@ -48,8 +48,8 @@ function katic_order(particles::RegularPolygons, cell_list::CuCellList, k::Integ
     maxcount = maximum(cell_list.counts)
     groupcount = 9 * maxcount
     groups_per_block = numthreads ÷ groupcount
-    numblocks = count(particles) ÷ groups_per_block + 1
-    orders = CuArray(zeros(Complex{numtype}, count(particles)))
+    numblocks = particlecount(particles) ÷ groups_per_block + 1
+    orders = CuArray(zeros(Complex{numtype}, particlecount(particles)))
     @cuda(threads=numthreads, blocks=numblocks,
           shmem = groups_per_block * (2 * groupcount + k) * sizeof(numtype),
           katic_order_parallel!(particles, cell_list, orders, k, maxcount,
@@ -72,7 +72,7 @@ function katic_order_parallel!(particles::RegularPolygons, cell_list::CuCellList
     group += 1
     if is_thread_active
         particle = (blockIdx().x - 1) * groups_per_block + group
-        is_thread_active = particle <= count(particles)
+        is_thread_active = particle <= particlecount(particles)
         if is_thread_active
             i, j = get_cell_list_indices(particles, cell_list, particle)
             is_thread_active = count_neighbors(cell_list, i, j) >= k
