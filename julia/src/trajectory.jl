@@ -22,9 +22,9 @@ struct TrajectoryReader
     filepath::String
 end
 
-RegularPolygonsSnapshot(particles::RegularPolygons) = RegularPolygonsSnapshot(
-    particles.sidenum, particles.radius, particles.boxshear[], Tuple(particles.boxsize),
-    Array(particles.centers), Array(particles.angles), 0) 
+RegularPolygonsSnapshot(particles::RegularPolygons) = CUDA.@allowscalar(
+    RegularPolygonsSnapshot(particles.sidenum, particles.radius, particles.boxshear[],
+        Tuple(particles.boxsize), Array(particles.centers), Array(particles.angles), 0))
 
 RegularPolygons(snapshot::RegularPolygonsSnapshot; gpu=false) =
     RegularPolygons{eltype(snapshot.centers)}(
