@@ -13,7 +13,7 @@ function apply_step_cpu!(sim::HPMCSimulation)
     
     iter = (rand(Bool) ?
         range(1, particlecount(sim.particles))
-        : range(particcount(sim.particles), 1, step=-1)
+        : range(particlecount(sim.particles), 1, step=-1)
     )
     for idx in iter
         if randchoices[idx]
