@@ -1,6 +1,7 @@
 @recipe function p(snapshot::RegularPolygonsSnapshot)
     vertices = _build_vertices(snapshot.sidenum, snapshot.radius,
                                snapshot.centers, snapshot.angles)
+    shearside = snapshot.boxsize[1] + snapshot.boxsize[2] * snapshot.boxshear[]
     for particle in 1:particlecount(snapshot)
         @series begin
             seriestype := :shape
@@ -12,7 +13,7 @@
             ratio --> :equal
             legend --> false
 
-            xlim --> (-snapshot.boxsize[1] / 2, snapshot.boxsize[1] / 2)
+            xlim --> (-shearside / 2, shearside / 2)
             ylim --> (-snapshot.boxsize[2] / 2, snapshot.boxsize[2] / 2)
 
             vertices[1, :, particle], vertices[2, :, particle]

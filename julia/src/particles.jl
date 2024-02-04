@@ -98,6 +98,8 @@ function crystallize!(particles::RegularPolygons,
     centers = reshape(centers, 2, length(centers)÷2)
     centers = centers[:, 1:particlecount(particles)]
 
+    CUDA.@allowscalar(centers[1, :] .+= centers[2, :] * particles.boxshear[])
+
     if isa(particles.centers, CuArray)
         centers = CuArray(centers)
     end
@@ -109,9 +111,9 @@ end
     particles.centers[1, idx] += x
     particles.centers[2, idx] += y
     # apply periodic boundary conditions
+    particles.centers[2, idx] = mod(particles.centers[2, idx] + particles.boxsize[2] / 2,
+        particles.boxsize[2]) - particles.boxsize[2] / 2
     shift = particles.boxsize[1] / 2 - particles.centers[2, idx] * particles.boxshear[]
     particles.centers[1, idx] = mod(particles.centers[1, idx] + shift,
         particles.boxsize[1]) - shift
-    particles.centers[2, idx] = mod(particles.centers[2, idx] + particles.boxsize[2] / 2,
-        particles.boxsize[2]) - particles.boxsize[2] / 2
 end

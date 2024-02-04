@@ -14,11 +14,11 @@ end
 
 @inline function _overlap_range(particles::RegularPolygons, i::Integer, j::Integer)
     dist = (particles.centers[1, j] - particles.centers[1, i],
-            particles.centers[2, j] - particles.centers[2, i])
+            mod(particles.centers[2, j] - particles.centers[2, i]
+                + particles.boxsize[2] / 2, particles.boxsize[2])
+            - particles.boxsize[2] / 2)
     shift = particles.boxsize[1] / 2 - dist[2] * particles.boxshear[]
-    dist = (mod(dist[1] + shift, particles.boxsize[1]) - shift,
-            mod(dist[2] + particles.boxsize[2] / 2, particles.boxsize[2])
-                - particles.boxsize[2] / 2)
+    dist = (mod(dist[1] + shift, particles.boxsize[1]) - shift, dist[2])
     distnorm = √(dist[1]^2 + dist[2]^2)
     return (distnorm <= 2 * particles.bisector, distnorm > 2 * particles.radius,
             dist, distnorm)
@@ -61,11 +61,10 @@ end
 @inline function _overlap_range_disk(particles::RegularPolygons, index::Integer,
         center::Tuple{<:Real, <:Real}, radius::Real)
     dist = (center[1] - particles.centers[1, index],
-            center[2] - particles.centers[2, index])
+            mod(center[2] - particles.centers[2, index] + particles.boxsize[2] / 2,
+                particles.boxsize[2]) - particles.boxsize[2] / 2)
     shift = particles.boxsize[1] / 2 - dist[2] * particles.boxshear[]
-    dist = (mod(dist[1] + shift, particles.boxsize[1]) - shift,
-            mod(dist[2] + particles.boxsize[2] / 2, particles.boxsize[2])
-                - particles.boxsize[2] / 2)
+    dist = (mod(dist[1] + shift, particles.boxsize[1]) - shift, dist[2])
     distnorm = √(dist[1]^2 + dist[2]^2)
     return (distnorm <= radius + particles.bisector, distnorm > radius + particles.radius,
             dist, distnorm)
