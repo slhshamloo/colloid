@@ -110,10 +110,23 @@ end
 @inline function move!(particles::RegularPolygons, idx::Integer, x::Real, y::Real)
     particles.centers[1, idx] += x
     particles.centers[2, idx] += y
-    # apply periodic boundary conditions
+    apply_parallelogram_boundary!(particles, idx)
+end
+
+@inline function apply_parallelogram_boundary!(particles::RegularPolygons, idx::Integer)
+    preshift = particles.boxsize[1] / 2 - particles.centers[2, idx] * particles.boxshear[]
     particles.centers[2, idx] = mod(particles.centers[2, idx] + particles.boxsize[2] / 2,
         particles.boxsize[2]) - particles.boxsize[2] / 2
-    shift = particles.boxsize[1] / 2 - particles.centers[2, idx] * particles.boxshear[]
-    particles.centers[1, idx] = mod(particles.centers[1, idx] + shift,
-        particles.boxsize[1]) - shift
+    postshift = particles.boxsize[1] / 2 - particles.centers[2, idx] * particles.boxshear[]
+    particles.centers[1, idx] = mod(particles.centers[1, idx] + preshift,
+        particles.boxsize[1]) - postshift
+end
+
+@inline function apply_parallelogram_boundary(
+        particles::RegularPolygons, vec::Tuple{<:Real, <:Real})
+    preshift = particles.boxsize[1] / 2 - vec[2] * particles.boxshear[]
+    y = mod(vec[2] + particles.boxsize[2] / 2,
+        particles.boxsize[2]) - particles.boxsize[2] / 2
+    postshift = particles.boxsize[1] / 2 - y * particles.boxshear[]
+    return (mod(vec[1] + preshift, particles.boxsize[1]) - postshift, y)
 end
