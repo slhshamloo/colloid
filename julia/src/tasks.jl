@@ -64,17 +64,18 @@ end
 
 mutable struct BoxMover <: AbstractBoxUpdater
     pressure::Real
-    xchange::Real
-    ychange::Real
+    change::AbstractVector
+    weights::Union{AbstractVector, Tuple{Real, Real, Real}}
     cond::Function
+    
+    accepted_moves::AbstractVector
+    rejected_moves::AbstractVector
 
-    accepted_xmoves::Integer
-    rejected_xmoves::Integer
-    accepted_ymoves::Integer
-    rejected_ymoves::Integer
-
-    function BoxMover(cond::Function, pressure::Real, xchange::Real, ychange::Real)
-        new(pressure, xchange, ychange, cond, 0, 0, 0, 0)
+    function BoxMover(cond::Function, pressure::Real,
+            xchange::Real, ychange::Real, schange::Real = 0.0;
+            weights::Union{AbstractVector, Tuple{Real, Real, Real}} = (1.0, 1.0, 1.0))
+        new(pressure, [xchange, ychange, schange], weights ./ sum(weights), cond,
+            zeros(Int, 3), zeros(Int, 3))
     end
 end
 
@@ -88,7 +89,7 @@ mutable struct ForcefulCompressor <: AbstractUpdater
     completed::Bool
 
     function ForcefulCompressor(cond::Function, target_boxsize::Tuple{<:Real, <:Real};
-                                minscale::Real = 0.99, max_overlap_fraction::Real=0.25)
+                                minscale::Real = 0.99, max_overlap_fraction::Real = 0.25)
         new(target_boxsize, cond, minscale, max_overlap_fraction, false, false)
     end
 end
@@ -148,31 +149,25 @@ mutable struct AreaUpdateTuner <: AbstractUpdater
 end
 
 mutable struct BoxMoveTuner <: AbstractUpdater
+    box_mover::BoxMover
     target_acceptance_rate::Real
     cond::Function
 
-    box_mover::BoxMover
-    max_xchange::Real
-    max_ychange::Real
-
+    max_change::Union{AbstractVector, Tuple{Real, Real, Real}}
     maxscale::Real
     gamma::Real
     tollerance::Real
 
-    xtuned::Bool
-    ytuned::Bool
-    prev_xtuned::Bool
-    prev_ytuned::Bool
+    tuned::BitVector
+    prev_tuned::BitVector
 
-    prev_accepted_xmoves::Integer
-    prev_rejected_xmoves::Integer
-    prev_accepted_ymoves::Integer
-    prev_rejected_ymoves::Integer
+    prev_accepted_moves::Vector{<:Integer}
+    prev_rejected_moves::Vector{<:Integer}
 
-    function BoxMoveTuner(cond::Function, target_acceptance_rate::Real,
-            box_mover::BoxMover; max_xchange::Real = 1.0, max_ychange::Real = 1.0,
-            maxscale::Real = 2.0, gamma::Real = 1.0, tollerance::Real = 0.01)
-        new(target_acceptance_rate, cond, box_mover, max_xchange, max_ychange,
-            maxscale, gamma, tollerance, false, false, false, false, 0, 0, 0, 0)
+    function BoxMoveTuner(cond::Function, target_acceptance_rate::Real, box_mover::BoxMover;
+            maxscale::Real = 2.0, gamma::Real = 1.0, tollerance::Real = 0.01,
+            max_change::Union{AbstractVector, Tuple{Real, Real, Real}} = (0.1, 0.1, 0.1))
+        new(box_mover, target_acceptance_rate, cond, max_change, maxscale,
+            gamma, tollerance, falses(3), falses(3), zeros(Int, 3), zeros(Int, 3))
     end
 end

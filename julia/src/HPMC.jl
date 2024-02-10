@@ -27,7 +27,8 @@ include("simulate.jl")
 include("simseq.jl")
 include("simgpu.jl")
 include("record.jl")
-include("update.jl")
+include("tune.jl")
+include("boxmove.jl")
 include("visualize.jl")
 
 end
