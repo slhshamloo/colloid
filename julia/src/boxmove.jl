@@ -191,7 +191,7 @@ end
 end
 
 @inline function apply_shear_update!(sim::HPMCSimulation, shearchange::Real)
-    sim.particles.centers[:, 1] .+= sim.particles.centers[:, 2] * shearchange
+    sim.particles.centers[1, :] .+= sim.particles.centers[2, :] * shearchange
 end
 
 function get_metropolis_factor(
@@ -232,7 +232,7 @@ end
         CUDA.@allowscalar sim.particles.boxsize[1], sim.particles.boxsize[2] = (
             params.lxold, params.lyold)
     else
-        sim.particles.centers[:, 1] .-= sim.particles.centers[:, 2] * params.shearchange
+        sim.particles.centers[1, :] .-= sim.particles.centers[2, :] * params.shearchange
         CUDA.@allowscalar sim.particles.boxshear[] -= params.shearchange
     end
     updater.rejected_moves[params.choice] += 1
