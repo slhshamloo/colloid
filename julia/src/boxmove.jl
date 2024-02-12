@@ -45,7 +45,7 @@ function update!(sim::HPMCSimulation, updater::AbstractBoxUpdater)
             reject_box_move!(sim, updater, old_cell_list, params)
         else
             if rand() < get_metropolis_factor(
-                    sim, updater, oldpotential, params.area_change)
+                    sim, updater, oldpotential, params.areachange)
                 accept_box_move!(updater, params)
             else
                 reject_box_move!(sim, updater, old_cell_list, params)
@@ -111,12 +111,11 @@ function propose_box_update!(sim::HPMCSimulation, params::NamedTuple,
         get_update_param::Function, apply_update!::Function)
     old_cell_list = sim.cell_list
     update_param, return_params = get_update_param(sim, params)
+    apply_update!(sim, update_param)
     if sim.gpu
-        apply_update!(sim, update_param)
         sim.cell_list = CuCellList(sim.particles, sim.cell_list.shift)
         violates = count_violations_gpu(sim.particles, sim.constraints) > 0
     else
-        apply_update!(sim, update_param)
         sim.cell_list = SeqCellList(sim.particles)
         violates = has_violation(sim.particles, sim.constraints)
     end
@@ -147,8 +146,8 @@ end
 
 function propose_box_update!(sim::HPMCSimulation, updater::AreaUpdater)
     CUDA.@allowscalar lxold, lyold = sim.particles.boxsize
-    area_new = lxold * lyold + 2 * (rand() - 0.5) * updater.area_change
-    lxnew = √(lxold / lyold * area_new)
+    newarea = lxold * lyold + 2 * (rand() - 0.5) * updater.areachange
+    lxnew = √(lxold / lyold * newarea)
     lynew = lyold / lxold * lxnew
     CUDA.@allowscalar sim.particles.boxsize[1], sim.particles.boxsize[2] = lxnew, lynew
     return propose_box_update!(sim, (lxold=lxold, lyold=lyold, lxnew=lxnew, lynew=lynew),
@@ -172,12 +171,12 @@ end
     else
         scale = (params.lxnew / params.lxold, params.lynew / params.lyold)
     end
-    return scale, (scale=scale, area_change = (
+    return scale, (scale=scale, areachange = (
         params.lxnew * params.lynew - params.lxold * params.lyold), params...)
 end
 
 @inline function get_shear(sim, params)
-    return params.shearchange, (area_change=0.0, params...)
+    return params.shearchange, (areachange=0.0, params...)
 end
 
 @inline function apply_area_update_isotropic!(sim::HPMCSimulation, scale::AbstractVector)
@@ -197,8 +196,8 @@ end
 
 function get_metropolis_factor(
         sim::HPMCSimulation, updater::AbstractBoxUpdater,
-        oldpotential::Real, area_change::Real)
-    metropolis_exponent = sim.beta * updater.pressure * area_change
+        oldpotential::Real, areachange::Real)
+    metropolis_exponent = sim.beta * updater.pressure * areachange
     if !isnothing(sim.potential) || !isnothing(sim.pairpotential)
         calculate_potentials!(sim.particles, sim.cell_list,
             sim.particle_potentials, sim.potential, sim.pairpotential)
