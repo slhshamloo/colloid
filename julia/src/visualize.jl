@@ -1,7 +1,7 @@
 @recipe function p(snapshot::RegularPolygonsSnapshot)
     vertices = _build_vertices(snapshot.sidenum, snapshot.radius,
                                snapshot.centers, snapshot.angles)
-    shearside = snapshot.boxsize[1] + snapshot.boxsize[2] * snapshot.boxshear[]
+    shearside = snapshot.boxsize[1] + abs(snapshot.boxsize[2] * snapshot.boxshear[])
     for particle in 1:particlecount(snapshot)
         @series begin
             seriestype := :shape
@@ -24,7 +24,7 @@ end
 @recipe function p(snapshot::RegularPolygonsSnapshot, colors::Vector{<:Colorant})
     vertices = _build_vertices(snapshot.sidenum, snapshot.radius,
                                snapshot.centers, snapshot.angles)
-    shearside = snapshot.boxsize[1] + snapshot.boxsize[2] * snapshot.boxshear[]
+    shearside = snapshot.boxsize[1] + abs(snapshot.boxsize[2] * snapshot.boxshear[])
     for particle in 1:particlecount(snapshot)
         @series begin
             seriestype := :shape
