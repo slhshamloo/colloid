@@ -112,8 +112,8 @@ function propose_box_update!(sim::HPMCSimulation, params::NamedTuple,
     old_cell_list = sim.cell_list
     update_param, return_params = get_update_param(sim, params)
     if sim.gpu
-        sim.cell_list = CuCellList(sim.particles, sim.cell_list.shift)
         apply_update!(sim, update_param)
+        sim.cell_list = CuCellList(sim.particles, sim.cell_list.shift)
         violates = count_violations_gpu(sim.particles, sim.constraints) > 0
     else
         apply_update!(sim, update_param)
@@ -126,18 +126,15 @@ end
 function propose_box_update!(sim::HPMCSimulation, updater::BoxMover)
     CUDA.@allowscalar lxold, lyold = sim.particles.boxsize
     choice = get_choice(updater)
-    if choice == 1
-        lxnew, lynew = lxold + 2 * (rand() - 0.5) * updater.change[1], lyold
-        CUDA.@allowscalar sim.particles.boxsize[1], sim.particles.boxsize[2] = lxnew, lynew
+    if choice < 3
+        if choice == 1
+            lxnew, lynew = lxold + 2 * (rand() - 0.5) * updater.change[1], lyold
+            CUDA.@allowscalar sim.particles.boxsize[1] = lxnew
+        else
+            lxnew, lynew = lxold, lyold + 2 * (rand() - 0.5) * updater.change[2]
+            CUDA.@allowscalar sim.particles.boxsize[2] = lynew
+        end
         params = (lxold=lxold, lyold=lyold, lxnew=lxnew, lynew=lynew, choice=choice)
-        get_update_param, apply_update! = get_scale, apply_area_update!
-    elseif choice == 2
-        lxnew, lynew = lxold, lyold + 2 * (rand() - 0.5) * updater.change[2]
-        CUDA.@allowscalar oldshear = sim.particles.boxshear[]
-        CUDA.@allowscalar sim.particles.boxsize[1], sim.particles.boxsize[2] = lxnew, lynew
-        CUDA.@allowscalar sim.particles.boxshear[] *= lyold / lynew
-        params = (lxold=lxold, lyold=lyold, lxnew=lxnew, lynew=lynew,
-                  oldshear=oldshear, choice=choice)
         get_update_param, apply_update! = get_scale, apply_area_update!
     else
         shearchange = 2 * (rand() - 0.5) * updater.change[3]
@@ -155,7 +152,7 @@ function propose_box_update!(sim::HPMCSimulation, updater::AreaUpdater)
     lynew = lyold / lxold * lxnew
     CUDA.@allowscalar sim.particles.boxsize[1], sim.particles.boxsize[2] = lxnew, lynew
     return propose_box_update!(sim, (lxold=lxold, lyold=lyold, lxnew=lxnew, lynew=lynew),
-        get_scale, apply_area_update!)
+                               get_scale, apply_area_update_isotropic!)
 end
 
 @inline function get_choice(updater::BoxMover)
@@ -183,8 +180,15 @@ end
     return params.shearchange, (area_change=0.0, params...)
 end
 
-@inline function apply_area_update!(sim::HPMCSimulation, scale::AbstractVector)
+@inline function apply_area_update_isotropic!(sim::HPMCSimulation, scale::AbstractVector)
     sim.particles.centers .*= scale
+end
+
+@inline function apply_area_update!(sim::HPMCSimulation, scale::AbstractVector)
+    CUDA.@allowscalar shear = sim.particles.boxshear[]
+    sim.particles.centers[1, :] .-= sim.particles.centers[2, :] * shear
+    sim.particles.centers .*= scale
+    sim.particles.centers[1, :] .+= sim.particles.centers[2, :] * shear
 end
 
 @inline function apply_shear_update!(sim::HPMCSimulation, shearchange::Real)
@@ -225,15 +229,19 @@ end
         old_cell_list::CellList, params::NamedTuple)
     sim.cell_list = old_cell_list
     if params.choice < 3
-        sim.particles.centers ./= params.scale
+        reverse_area_update!(sim, params.scale)
         CUDA.@allowscalar sim.particles.boxsize[1], sim.particles.boxsize[2] = (
             params.lxold, params.lyold)
-        if params.choice == 2
-            CUDA.@allowscalar sim.particles.boxshear[] = params.oldshear
-        end
     else
         sim.particles.centers[:, 1] .-= sim.particles.centers[:, 2] * params.shearchange
         CUDA.@allowscalar sim.particles.boxshear[] -= params.shearchange
     end
     updater.rejected_moves[params.choice] += 1
+end
+
+@inline function reverse_area_update!(sim::HPMCSimulation, scale::AbstractVector)
+    CUDA.@allowscalar shear = sim.particles.boxshear[]
+    sim.particles.centers[1, :] .-= sim.particles.centers[2, :] * shear
+    sim.particles.centers ./= scale
+    sim.particles.centers[1, :] .+= sim.particles.centers[2, :] * shear
 end
