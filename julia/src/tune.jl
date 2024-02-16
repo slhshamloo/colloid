@@ -19,10 +19,10 @@ function update!(sim::HPMCSimulation, tuner::BoxMoveTuner)
     if tuner.cond(sim.timestep)
         acceptance = get_new_acceptance_rates(tuner)
         set_tuner_flags!(tuner, acceptance)
-        @. tuner.box_mover.change = min(tuner.max_change,
+        @. tuner.boxmover.change = min(tuner.max_change,
             min((acceptance + tuner.gamma) / (tuner.target_acceptance_rate + tuner.gamma),
-                tuner.maxscale,) * tuner.box_mover.change)
-        tuner.prev_accepted_moves .= tuner.box_mover.accepted_moves
+                tuner.maxscale,) * tuner.boxmover.change)
+        tuner.prev_accepted_moves .= tuner.boxmover.accepted_moves
     end
 end
 
@@ -58,8 +58,8 @@ end
 end
 
 @inline function get_new_acceptance_rates(tuner::BoxMoveTuner)
-    accs = tuner.box_mover.accepted_moves - tuner.prev_accepted_moves
-    rejs = tuner.box_mover.rejected_moves - tuner.prev_rejected_moves
+    accs = tuner.boxmover.accepted_moves - tuner.prev_accepted_moves
+    rejs = tuner.boxmover.rejected_moves - tuner.prev_rejected_moves
     return [acc + rej == 0 ? 1.0 : acc / (acc + rej) for (acc, rej) in zip(accs, rejs)]
 end
 

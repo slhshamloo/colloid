@@ -149,7 +149,7 @@ mutable struct AreaUpdateTuner <: AbstractUpdater
 end
 
 mutable struct BoxMoveTuner <: AbstractUpdater
-    box_mover::BoxMover
+    boxmover::BoxMover
     target_acceptance_rate::Real
     cond::Function
 
@@ -164,10 +164,10 @@ mutable struct BoxMoveTuner <: AbstractUpdater
     prev_accepted_moves::Vector{<:Integer}
     prev_rejected_moves::Vector{<:Integer}
 
-    function BoxMoveTuner(cond::Function, target_acceptance_rate::Real, box_mover::BoxMover;
+    function BoxMoveTuner(cond::Function, target_acceptance_rate::Real, boxmover::BoxMover;
             maxscale::Real = 2.0, gamma::Real = 1.0, tollerance::Real = 0.01,
             max_change::Union{AbstractVector, Tuple{Real, Real, Real}} = (0.1, 0.1, 0.1))
-        new(box_mover, target_acceptance_rate, cond, max_change, maxscale,
+        new(boxmover, target_acceptance_rate, cond, max_change, maxscale,
             gamma, tollerance, falses(3), falses(3), zeros(Int, 3), zeros(Int, 3))
     end
 end
