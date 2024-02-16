@@ -51,14 +51,14 @@ end
 
 mutable struct AreaUpdater <: AbstractBoxUpdater
     pressure::Real
-    area_change::Real
+    areachange::Real
     cond::Function
 
     accepted_moves::Integer
     rejected_moves::Integer
 
-    function AreaUpdater(cond::Function, pressure::Real, area_change::Real)
-        new(pressure, area_change, cond, 0, 0)
+    function AreaUpdater(cond::Function, pressure::Real, areachange::Real)
+        new(pressure, areachange, cond, 0, 0)
     end
 end
 
@@ -127,7 +127,7 @@ mutable struct AreaUpdateTuner <: AbstractUpdater
     target_acceptance_rate::Real
     cond::Function
 
-    area_updater::AreaUpdater
+    areaupdater::AreaUpdater
     max_move_size::Real
 
     maxscale::Real
@@ -141,9 +141,9 @@ mutable struct AreaUpdateTuner <: AbstractUpdater
     prev_rejected_moves::Integer
 
     function AreaUpdateTuner(cond::Function, target_acceptance_rate::Real,
-            area_updater::AreaUpdater; max_move_size::Real = 10.0, maxscale::Real = 2.0,
+            areaupdater::AreaUpdater; max_move_size::Real = 10.0, maxscale::Real = 2.0,
             gamma::Real = 1.0, tollerance::Real = 0.01)
-        new(target_acceptance_rate, cond, area_updater, max_move_size, maxscale,
+        new(target_acceptance_rate, cond, areaupdater, max_move_size, maxscale,
             gamma, tollerance, false, false, 0, 0)
     end
 end

@@ -28,8 +28,8 @@ end
 
 function update!(sim::HPMCSimulation, tuner::AreaUpdateTuner)
     if tuner.cond(sim.timestep)
-        acc_moves = tuner.area_updater.accepted_moves - tuner.prev_accepted_moves
-        rej_moves = tuner.area_updater.rejected_moves - tuner.prev_rejected_moves
+        acc_moves = tuner.areaupdater.accepted_moves - tuner.prev_accepted_moves
+        rej_moves = tuner.areaupdater.rejected_moves - tuner.prev_rejected_moves
         acceptance_rate = acc_moves / (acc_moves + rej_moves)
         if abs(acceptance_rate - tuner.target_acceptance_rate) <= tuner.tollerance
             if tuner.prev_tuned
@@ -39,13 +39,13 @@ function update!(sim::HPMCSimulation, tuner::AreaUpdateTuner)
             end
         end
 
-        tuner.area_updater.area_change = min(tuner.max_move_size,
+        tuner.areaupdater.areachange = min(tuner.max_move_size,
             min(tuner.maxscale, (acceptance_rate + tuner.gamma)
                 / (tuner.target_acceptance_rate + tuner.gamma))
-                * tuner.area_updater.area_change)
+                * tuner.areaupdater.areachange)
 
-        tuner.prev_accepted_moves = tuner.area_updater.accepted_moves
-        tuner.prev_rejected_moves = tuner.area_updater.rejected_moves
+        tuner.prev_accepted_moves = tuner.areaupdater.accepted_moves
+        tuner.prev_rejected_moves = tuner.areaupdater.rejected_moves
     end
 end
 
