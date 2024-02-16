@@ -166,7 +166,7 @@ mutable struct BoxMoveTuner <: AbstractUpdater
 
     function BoxMoveTuner(cond::Function, target_acceptance_rate::Real, boxmover::BoxMover;
             maxscale::Real = 2.0, gamma::Real = 1.0, tollerance::Real = 0.01,
-            max_change::Union{AbstractVector, Tuple{Real, Real, Real}} = (0.1, 0.1, 0.1))
+            max_change::Union{AbstractVector, Tuple{Real, Real, Real}} = (1.0, 1.0, 1.0))
         new(boxmover, target_acceptance_rate, cond, max_change, maxscale,
             gamma, tollerance, falses(3), falses(3), zeros(Int, 3), zeros(Int, 3))
     end
