@@ -21,8 +21,9 @@ function update!(sim::HPMCSimulation, tuner::BoxMoveTuner)
         set_tuner_flags!(tuner, acceptance)
         @. tuner.boxmover.change = min(tuner.max_change,
             min((acceptance + tuner.gamma) / (tuner.target_acceptance_rate + tuner.gamma),
-                tuner.maxscale,) * tuner.boxmover.change)
+                tuner.maxscale) * tuner.boxmover.change)
         tuner.prev_accepted_moves .= tuner.boxmover.accepted_moves
+        tuner.prev_rejected_moves .= tuner.boxmover.rejected_moves
     end
 end
 
@@ -42,7 +43,7 @@ function update!(sim::HPMCSimulation, tuner::AreaUpdateTuner)
         tuner.areaupdater.areachange = min(tuner.max_move_size,
             min(tuner.maxscale, (acceptance_rate + tuner.gamma)
                 / (tuner.target_acceptance_rate + tuner.gamma))
-                * tuner.areaupdater.areachange)
+            * tuner.areaupdater.areachange)
 
         tuner.prev_accepted_moves = tuner.areaupdater.accepted_moves
         tuner.prev_rejected_moves = tuner.areaupdater.rejected_moves
