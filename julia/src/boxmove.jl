@@ -179,11 +179,13 @@ end
     return params.shearchange, (areachange=0.0, params...)
 end
 
-@inline function apply_area_update_isotropic!(sim::HPMCSimulation, scale::AbstractVector)
+@inline function apply_area_update_isotropic!(
+        sim::HPMCSimulation, scale::Union{AbstractVector, Tuple{<:Real, <:Real}})
     sim.particles.centers .*= scale
 end
 
-@inline function apply_area_update!(sim::HPMCSimulation, scale::AbstractVector)
+@inline function apply_area_update!(
+        sim::HPMCSimulation, scale::Union{AbstractVector, Tuple{<:Real, <:Real}})
     CUDA.@allowscalar shear = sim.particles.boxshear[]
     sim.particles.centers[1, :] .-= sim.particles.centers[2, :] * shear
     sim.particles.centers .*= scale
