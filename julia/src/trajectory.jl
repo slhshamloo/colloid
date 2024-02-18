@@ -31,7 +31,15 @@ RegularPolygons(snapshot::RegularPolygonsSnapshot; gpu=false) =
         snapshot.sidenum, snapshot.radius, snapshot.boxsize,
         snapshot.centers, snapshot.angles; gpu=gpu, boxshear=snapshot.boxshear)
 
-function RegularPolygonsTrajectory(filepath)
+function RegularPolygonsSnapshot(filepath::String, frame::Integer)
+    jldopen(filepath) do f
+        fstr = "frame$frame/"
+        return RegularPolygonsSnapshot(f["sidenum"], f["radius"], f[fstr*"boxshear"],
+            Tuple(f[fstr*"boxsize"]), f[fstr*"centers"], f[fstr*"angles"], f[fstr*"time"])
+    end
+end
+
+function RegularPolygonsTrajectory(filepath::String)
     jldopen(filepath) do f
         sidenum, radius = f["sidenum"], f["radius"]
     
@@ -57,6 +65,30 @@ function RegularPolygonsTrajectory(filepath)
             if !isa(e, KeyError)
                 throw(e)
             end
+        end
+        return RegularPolygonsTrajectory(
+            sidenum, radius, boxshears, boxsizes, centers, angles, times)
+    end
+end
+
+function RegularPolygonsTrajectory(filepath::String, frames::AbstractUnitRange)
+    jldopen(filepath) do f
+        sidenum, radius = f["sidenum"], f["radius"]
+    
+        boxsizes = Vector{typeof(f["frame1/boxsize"])}(undef, 0)
+        boxshears = Vector{typeof(f["frame1/boxshear"])}(undef, 0)
+        times = Vector{typeof(f["frame1/time"])}(undef, 0)
+
+        numtype = eltype(f["frame1/centers"])
+        centers = Vector{Matrix{numtype}}(undef, 0)
+        angles = Vector{Vector{numtype}}(undef, 0)
+
+        for frame in frames
+            push!(boxshears, f["frame$frame/boxshear"])
+            push!(boxsizes, f["frame$frame/boxsize"])
+            push!(centers, f["frame$frame/centers"])
+            push!(angles, f["frame$frame/angles"])
+            push!(times, f["frame$frame/time"])
         end
         return RegularPolygonsTrajectory(
             sidenum, radius, boxshears, boxsizes, centers, angles, times)
