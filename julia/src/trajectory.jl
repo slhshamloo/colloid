@@ -18,10 +18,6 @@ struct RegularPolygonsTrajectory
     times::AbstractVector
 end
 
-struct TrajectoryReader
-    filepath::String
-end
-
 RegularPolygonsSnapshot(particles::RegularPolygons) = CUDA.@allowscalar(
     RegularPolygonsSnapshot(particles.sidenum, particles.radius, particles.boxshear[],
         Tuple(particles.boxsize), Array(particles.centers), Array(particles.angles), 0))
@@ -105,40 +101,6 @@ Base.getindex(trajectory::RegularPolygonsTrajectory, frames::AbstractUnitRange) 
         trajectory.sidenum, trajectory.radius, trajectory.boxshears[frames],
         trajectory.boxsizes[frames], trajectory.centers[frames],
         trajectory.angles[frames], trajectory.times[frames])
-
-function Base.getindex(reader::TrajectoryReader, frame::Int)
-    jldopen(reader.filepath) do f
-        boxsize = f["frame$frame/boxsize"]
-        return RegularPolygonsSnapshot(f["sidenum"], f["radius"], f["boxshear"],
-            (boxsize[1], boxsize[2]), f["frame$frame/centers"], f["frame$frame/angles"],
-            f["frame$frame/time"])
-    end
-end
-
-function Base.getindex(reader::TrajectoryReader, frames::AbstractUnitRange)
-    jldopen(reader.filepath) do f
-        sidenum, radius = f["sidenum"], f["radius"]
-    
-        boxsizes = Vector{typeof(f["frame1/boxsize"])}(undef, 0)
-        boxshears = Vector{typeof(f["frame1/boxshear"])}(undef, 0)
-        times = Vector{typeof(f["frame1/time"])}(undef, 0)
-
-        numtype = eltype(f["frame1/centers"])
-        centers = Vector{Matrix{numtype}}(undef, 0)
-        angles = Vector{Vector{numtype}}(undef, 0)
-
-        for frame in frames
-            push!(boxshears, f["frame$frame/boxshear"])
-            push!(boxsizes, f["frame$frame/boxsize"])
-            push!(centers, f["frame$frame/centers"])
-            push!(angles, f["frame$frame/angles"])
-            push!(times, f["frame$frame/time"])
-            frame += 1
-        end
-        return RegularPolygonsTrajectory(
-            sidenum, radius, boxshears, boxsizes, centers, angles, times)
-    end
-end
 
 @inline Base.length(trajectory::RegularPolygonsTrajectory) = length(trajectory.times)
 
