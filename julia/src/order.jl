@@ -1,33 +1,35 @@
 function katic_order(particles::RegularPolygons, k::Integer; numtype::DataType = Float32)
     if isa(particles.centers, CuArray)
-        return katic_order(particles, CuCellList(particles), k, numtype=numtype)
+        return korder(particles, CuCellList(particles), k,
+            (kk, neighbor_r, neighbor_angle) -> exp(1im * kk * neighbor_angle) / kk,
+            numtype=numtype)
     else
-        return katic_order(particles, SeqCellList(particles), k, numtype=numtype)
+        return korder(particles, SeqCellList(particles), k,
+            (kk, neighbor_r, neighbor_angle) -> sum(exp.(1im * kk * neighbor_angle)) / kk,
+            numtype=numtype)
     end
 end
 
-function katic_order(particles::RegularPolygons, cell_list::SeqCellList, k::Integer;
-                     numtype::DataType = Float32)
-    orders = zeros(particlecount(particles), Complex{numtype})
+@inline katic_order(particles::RegularPolygons, cell_list::SeqCellList, k::Integer;
+    numtype::DataType = Float32) = korder(particles, cell_list, k,
+        (kk, neighbor_r, neighbor_angle) -> sum(exp.(1im * kk * neighbor_angle)) / kk,
+        numtype=numtype)
+
+@inline katic_order(particles::RegularPolygons, cell_list::CuCellList, k::Integer;
+    numtype::DataType = Float32) = korder(particles, cell_list, k,
+        (kk, neighbor_r, neighbor_angle) -> exp(1im * kk * neighbor_angle) / kk,
+        numtype=numtype)
+
+function korder(particles::RegularPolygons, cell_list::SeqCellList, k::Integer,
+                orderfunc::Function; iscomplex::Bool = true, numtype::DataType = Float32)
+    orders = (iscomplex ? zeros(Complex{numtype}, particlecount(particles))
+                        : zeros(numtype, particlecount(particles)))
     for cell in CartesianIndices(cell_list.cells)
         i, j = Tuple(cell)
         for idx in cell_list.cells[i, j]
             neighbor_r = Vector{numtype}(undef, 0)
             neighbor_angle = Vector{numtype}(undef, 0)
-            for neighbor_cell in (
-                    cell_list.cells[mod(i - 2, size(cell_list.counts, 1)) + 1,
-                                    mod(j - 2, size(cell_list.counts, 2)) + 1],
-                    cell_list.cells[mod(i - 2, size(cell_list.counts, 1)) + 1, j],
-                    cell_list.cells[mod(i - 2, size(cell_list.counts, 1)) + 1,
-                                    mod(j, size(cell_list.counts, 1)) + 1],
-                    cell_list.cells[i, mod(j - 2, size(cell_list.counts, 1)) + 1],
-                    cell_list.cells[i, j] - 1,
-                    cell_list.cells[i, mod(j, size(cell_list.counts, 1)) + 1],
-                    cell_list.cells[mod(i, size(cell_list.counts, 1)) + 1,
-                                    mod(j - 2, size(cell_list.counts, 2)) + 1],
-                    cell_list.cells[mod(i, size(cell_list.counts, 1)) + 1, j],
-                    cell_list.cells[mod(i, size(cell_list.counts, 1)) + 1,
-                                    mod(j, size(cell_list.counts, 1)) + 1])
+            for neighbor_cell in get_neighbors(cell_list.cells, i, j)
                 for neighbor in neighbor_cell
                     r, angle = get_dist_and_angle(particles, idx, neighbor)
                     push!(neighbor_r, r)
@@ -35,37 +37,41 @@ function katic_order(particles::RegularPolygons, cell_list::SeqCellList, k::Inte
                 end
             end
             if length(neighbor_r) >= k
-                neighbor_angle = neighbor_angle[partialsortperm(neighbor_r, 1:k)]
-                orders[idx] += sum(exp.(1im * k * neighbor_angle)) / k
+                local_indices = partialsortperm(neighbor_r, 1:k)
+                neighbor_r = neighbor_r[local_indices]
+                neighbor_angle = neighbor_angle[local_indices]
+                orders[idx] += orderfunc(k, neighbor_r, neighbor_angle)
             end
         end
     end
     return orders
 end
 
-function katic_order(particles::RegularPolygons, cell_list::CuCellList, k::Integer;
-                     numtype::DataType = Float32)
+function korder(particles::RegularPolygons, cell_list::CuCellList, k::Integer,
+                orderfunc::Function; iscomplex::Bool = true, numtype::DataType = Float32)
     maxcount = maximum(cell_list.counts)
     groupcount = 9 * maxcount
     groups_per_block = numthreads ÷ groupcount
     numblocks = particlecount(particles) ÷ groups_per_block + 1
-    orders = CuArray(zeros(Complex{numtype}, particlecount(particles)))
+    orders = (iscomplex ? zeros(Complex{numtype}, particlecount(particles))
+                        : zeros(numtype, particlecount(particles)))
+    orders = CuArray(orders)
     @cuda(threads=numthreads, blocks=numblocks,
-          shmem = groups_per_block * (2 * groupcount + k) * sizeof(numtype),
-          katic_order_parallel!(particles, cell_list, orders, k, maxcount,
-                                groupcount, groups_per_block, numtype))
+          shmem = 2 * groups_per_block * (groupcount + k) * sizeof(numtype),
+          korder_parallel!(particles, cell_list, orders, orderfunc, k,
+                           maxcount, groupcount, groups_per_block, numtype))
     return Vector(orders)
 end
 
-function katic_order_parallel!(particles::RegularPolygons, cell_list::CuCellList,
-        orders::CuDeviceVector, k::Integer, maxcount::Integer,
+function korder_parallel!(particles::RegularPolygons, cell_list::CuCellList,
+        orders::CuDeviceVector, orderfunc::Function, k::Integer, maxcount::Integer,
         groupcount::Integer, groups_per_block::Integer, numtype::DataType)
     active_threads = groups_per_block * groupcount
-    shared_memory = CuDynamicSharedArray(numtype, groups_per_block * (2 * groupcount + k))
+    shared_memory = CuDynamicSharedArray(numtype, 2 * groups_per_block * (groupcount + k))
     group_r = @view shared_memory[1:active_threads]
-    group_angle = @view shared_memory[
-        active_threads+1:2*active_threads]
-    neighbor_angle = @view shared_memory[2*active_threads+1:end]
+    group_angle = @view shared_memory[active_threads+1:2*active_threads]
+    neighbor_r = @view shared_memory[2*active_threads+1:2*active_threads+groups_per_block*k]
+    neighbor_angle = @view shared_memory[2*active_threads+groups_per_block*k+1:end]
 
     is_thread_active = threadIdx().x <= active_threads
     group, thread = divrem(threadIdx().x - 1, groupcount)
@@ -75,7 +81,7 @@ function katic_order_parallel!(particles::RegularPolygons, cell_list::CuCellList
         is_thread_active = particle <= particlecount(particles)
         if is_thread_active
             i, j = get_cell_list_indices(particles, cell_list, particle)
-            is_thread_active = count_neighbors(cell_list, i, j) >= k
+            is_thread_active = count_neighbors(cell_list.counts, i, j) >= k
             if is_thread_active
                 calc_neighbor!(particles, cell_list, group_r, group_angle,
                                particle, i, j, maxcount, thread)
@@ -84,12 +90,11 @@ function katic_order_parallel!(particles::RegularPolygons, cell_list::CuCellList
     end
     CUDA.sync_threads()
 
-    katic_partition_select!(group_r, group_angle, neighbor_angle, k,
-        group, thread, groupcount, is_thread_active)
-
+    k_partition_select!(group_r, group_angle, neighbor_r, neighbor_angle, k,
+                        group, thread, groupcount, is_thread_active)
     if is_thread_active && thread == 0
         for iteridx in (group - 1) * k + 1 : group * k
-            orders[particle] += exp(1im * k * neighbor_angle[iteridx]) / k
+            orders[particle] += orderfunc(k, neighbor_r[iteridx], neighbor_angle[iteridx])
         end
     end
     return
@@ -124,12 +129,13 @@ function get_dist_and_angle(particles::RegularPolygons, i::Integer, j::Integer)
     return r, angle
 end
 
-function katic_partition_select!(group_r::SubArray, group_angle::SubArray,
-        neighbor_angle::SubArray, k::Integer, group::Integer, thread::Integer,
-        groupcount::Integer, is_thread_active::Bool)
+function k_partition_select!(group_r::SubArray, group_angle::SubArray,
+        neighbor_r::SubArray, neighbor_angle::SubArray, k::Integer,
+        group::Integer, thread::Integer, groupcount::Integer, is_thread_active::Bool)
     if is_thread_active
         group_r = @view group_r[(group - 1) * groupcount + 1 : group * groupcount]
         group_angle = @view group_angle[(group - 1) * groupcount + 1 : group * groupcount]
+        neighbor_r = @view neighbor_r[(group - 1) * k + 1 : group * k]
         neighbor_angle = @view neighbor_angle[(group - 1) * k + 1 : group * k]
         thread += 1
     end
@@ -148,6 +154,7 @@ function katic_partition_select!(group_r::SubArray, group_angle::SubArray,
             CUDA.sync_threads()
         end
         if is_thread_active && isone(thread)
+            neighbor_r[selection] = group_r[1]
             neighbor_angle[selection] = group_angle[1]
             group_r[1] = typemax(eltype(group_r))
         end
@@ -155,20 +162,26 @@ function katic_partition_select!(group_r::SubArray, group_angle::SubArray,
     return
 end
 
-function count_neighbors(cell_list::CuCellList, i::Integer, j::Integer)
-    return (
-        cell_list.counts[mod(i - 2, size(cell_list.counts, 1)) + 1,
-                         mod(j - 2, size(cell_list.counts, 2)) + 1]
-        + cell_list.counts[mod(i - 2, size(cell_list.counts, 1)) + 1, j]
-        + cell_list.counts[mod(i - 2, size(cell_list.counts, 1)) + 1,
-                           mod(j, size(cell_list.counts, 1)) + 1]
-        + cell_list.counts[i, mod(j - 2, size(cell_list.counts, 1)) + 1]
-        + cell_list.counts[i, j] - 1
-        + cell_list.counts[i, mod(j, size(cell_list.counts, 1)) + 1]
-        + cell_list.counts[mod(i, size(cell_list.counts, 1)) + 1,
-                         mod(j - 2, size(cell_list.counts, 2)) + 1]
-        + cell_list.counts[mod(i, size(cell_list.counts, 1)) + 1, j]
-        + cell_list.counts[mod(i, size(cell_list.counts, 1)) + 1,
-                           mod(j, size(cell_list.counts, 1)) + 1]
-    )
+@inline function count_neighbors(counts::AbstractMatrix, i::Integer, j::Integer)
+    (counts[mod(i - 2, size(counts, 1)) + 1, mod(j - 2, size(counts, 2)) + 1]
+     + counts[mod(i - 2, size(counts, 1)) + 1, j]
+     + counts[mod(i - 2, size(counts, 1)) + 1, mod(j, size(counts, 1)) + 1]
+     + counts[i, mod(j - 2, size(counts, 1)) + 1]
+     + counts[i, j] - 1
+     + counts[i, mod(j, size(counts, 1)) + 1]
+     + counts[mod(i, size(counts, 1)) + 1, mod(j - 2, size(counts, 2)) + 1]
+     + counts[mod(i, size(counts, 1)) + 1, j]
+     + counts[mod(i, size(counts, 1)) + 1, mod(j, size(counts, 1)) + 1])
+end
+
+@inline function get_neighbors(cells::AbstractMatrix, i::Integer, j::Integer)
+    (cells[mod(i - 2, size(cells, 1)) + 1, mod(j - 2, size(cells, 2)) + 1],
+     cells[mod(i - 2, size(cells, 1)) + 1, j],
+     cells[mod(i - 2, size(cells, 1)) + 1, mod(j, size(cells, 1)) + 1],
+     cells[i, mod(j - 2, size(cells, 1)) + 1],
+     cells[i, j],
+     cells[i, mod(j, size(cells, 1)) + 1],
+     cells[mod(i, size(cell_list.counts, 1)) + 1, mod(j - 2, size(cells, 2)) + 1],
+     cells[mod(i, size(cells, 1)) + 1, j],
+     cells[mod(i, size(cells, 1)) + 1, mod(j, size(cells, 1)) + 1])
 end
