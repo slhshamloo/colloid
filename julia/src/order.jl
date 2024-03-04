@@ -65,16 +65,10 @@ function local_order(
     orders = (iscomplex ? zeros(Complex{numtype}, particlecount(particles))
                         : zeros(numtype, particlecount(particles)))
     orders = CuArray(orders)
-    if neighbors > 0
-        @cuda(threads=numthreads, blocks=numblocks,
-              shmem = 2 * groups_per_block * (groupcount + neighbors) * sizeof(numtype),
-              local_order_parallel!(particles, cell_list, orders, orderfunc, neighbors,
-                                    maxcount, groupcount, groups_per_block, numtype))
-    else
-        @cuda(threads=numthreads, blocks=numblocks,
-              local_order_parallel!(particles, cell_list, orders, orderfunc,
-                                    maxcount, groupcount, groups_per_block))
-    end
+    @cuda(threads=numthreads, blocks=numblocks,
+          shmem = 2 * groups_per_block * (groupcount + neighbors) * sizeof(numtype),
+          local_order_parallel!(particles, cell_list, orders, orderfunc, neighbors,
+                                maxcount, groupcount, groups_per_block, numtype))
     return Vector(orders)
 end
 
@@ -82,8 +76,16 @@ function local_order_parallel!(particles::RegularPolygons, cell_list::CuCellList
         orders::CuDeviceVector, orderfunc::Function, neighbors::Integer, maxcount::Integer,
         groupcount::Integer, groups_per_block::Integer, numtype::DataType)
     active_threads = groups_per_block * groupcount
-    group_r, group_angle, neighbor_r, neighbor_angle = get_local_order_shmem(
-        active_threads, groups_per_block, groupcount, neighbors, numtype)
+    shared_memory = CuDynamicSharedArray(
+        numtype, 2 * groups_per_block * (groupcount + neighbors))
+    group_r = @view shared_memory[1:active_threads]
+    group_angle = @view shared_memory[active_threads + 1 : 2 * active_threads]
+    if neighbors > 0
+        neighbor_r = @view shared_memory[
+            2 * active_threads + 1 : 2 * active_threads + groups_per_block * neighbors]
+        neighbor_angle = @view shared_memory[
+            2 * active_threads + groups_per_block * neighbors + 1 : end]
+    end
 
     is_thread_active = threadIdx().x <= active_threads
     group, thread = divrem(threadIdx().x - 1, groupcount)
@@ -93,62 +95,43 @@ function local_order_parallel!(particles::RegularPolygons, cell_list::CuCellList
         is_thread_active = particle <= particlecount(particles)
         if is_thread_active
             i, j = get_cell_list_indices(particles, cell_list, particle)
-            is_thread_active = count_neighbors(cell_list.counts, i, j) >= neighbors
-            if is_thread_active
-                calc_neighbor!(particles, cell_list, group_r, group_angle,
-                               particle, i, j, maxcount, thread)
-            end
-        end
-    end
-    CUDA.sync_threads()
-
-    k_partition_select!(group_r, group_angle, neighbor_r, neighbor_angle, neighbors,
-                        group, thread, groupcount, is_thread_active)
-    if is_thread_active && thread == 0
-        for iteridx in (group - 1) * neighbors + 1 : group * neighbors
-            orders[particle] += orderfunc(neighbor_r[iteridx], neighbor_angle[iteridx])
-        end
-    end
-    return
-end
-
-function local_order_parallel!(particles::RegularPolygons, cell_list::CuCellList,
-        orders::CuDeviceVector, orderfunc::Function, maxcount::Integer,
-        groupcount::Integer, groups_per_block::Integer)
-    if threadIdx().x <= groups_per_block * groupcount
-        group, thread = divrem(threadIdx().x - 1, groupcount)
-        group += 1
-        particle = (blockIdx().x - 1) * groups_per_block + group
-        if particle <= particlecount(particles)
-            i, j = get_cell_list_indices(particles, cell_list, particle)
-            if count_neighbors(cell_list.counts, i, j) > 0
-                ineighbor, jneighbor, kneighbor = get_neighbor_indices(
-                    cell_list, thread, maxcount, i, j)
-                if kneighbor <= cell_list.counts[ineighbor, jneighbor]
-                    neighbor = cell_list.cells[kneighbor, ineighbor, jneighbor]
-                    if particle != neighbor
-                        r, theta = get_dist_and_angle(particles, particle, neighbor)
-                        CUDA.@atomic orders[particle] += orderfunc(r, theta)
-                    end
+            if neighbors > 0
+                is_thread_active = count_neighbors(cell_list.counts, i, j) >= neighbors
+                if is_thread_active
+                    calc_neighbor!(particles, cell_list, group_r, group_angle,
+                                   particle, i, j, maxcount, thread)
+                end
+            else
+                is_thread_active = count_neighbors(cell_list.counts, i, j) > 0
+                if is_thread_active
+                    calc_order!(particles, cell_list, group_r, group_angle, orderfunc,
+                                particle, i, j, maxcount, thread)
                 end
             end
         end
     end
-    return
-end
 
-@inline function get_local_order_shmem(active_threads::Integer,
-        groups_per_block::Integer, groupcount::Integer,
-        neighbors::Integer, numtype::DataType)
-    shared_memory = CuDynamicSharedArray(
-        numtype, 2 * groups_per_block * (groupcount + neighbors))
-    group_r = @view shared_memory[1:active_threads]
-    group_angle = @view shared_memory[active_threads + 1 : 2 * active_threads]
-    neighbor_r = @view shared_memory[
-        2 * active_threads + 1 : 2 * active_threads + groups_per_block * neighbors]
-    neighbor_angle = @view shared_memory[
-        2 * active_threads + groups_per_block * neighbors + 1 : end]
-    return group_r, group_angle, neighbor_r, neighbor_angle
+    if neighbors > 0
+        CUDA.sync_threads()
+        k_partition_select!(group_r, group_angle, neighbor_r, neighbor_angle, neighbors,
+                            group, thread, groupcount, is_thread_active)
+        if is_thread_active && thread == 0
+            for iteridx in (group - 1) * neighbors + 1 : group * neighbors
+                orders[particle] += orderfunc(neighbor_r[iteridx], neighbor_angle[iteridx])
+            end
+        end
+    else
+        if !is_thread_active
+            group_r[threadIdx().x] = 0.0f0
+            group_angle[threadIdx().x] = 0.0f0
+        end
+        CUDA.sync_threads()
+        sum_parallel_double!(group_r, group_angle)
+        if threadIdx().x == 1
+            orders[particle] = group_r[1] + 1im * group_angle[1]
+        end
+    end
+    return
 end
 
 function calc_neighbor!(particles::RegularPolygons, cell_list::CuCellList,
@@ -166,6 +149,29 @@ function calc_neighbor!(particles::RegularPolygons, cell_list::CuCellList,
         end
     else
         group_r[threadIdx().x] = typemax(eltype(group_r))
+    end
+    return
+end
+
+function calc_order!(particles::RegularPolygons, cell_list::CuCellList,
+        group_r::SubArray, group_angle::SubArray, orderfunc::Function,
+        particle::Integer, i::Integer, j::Integer, maxcount::Integer, thread::Integer)
+    ineighbor, jneighbor, kneighbor = get_neighbor_indices(
+        cell_list, thread, maxcount, i, j)
+    if kneighbor <= cell_list.counts[ineighbor, jneighbor]
+        neighbor = cell_list.cells[kneighbor, ineighbor, jneighbor]
+        if particle != neighbor
+            r, theta = get_dist_and_angle(particles, particle, neighbor)
+            order = orderfunc(r, theta)
+            group_r[threadIdx().x] = real(order)
+            group_angle[threadIdx().x] = imag(order)
+        else
+            group_r[threadIdx().x] = 0.0f0
+            group_angle[threadIdx().x] = 0.0f0
+        end
+    else
+        group_r[threadIdx().x] = 0.0f0
+        group_angle[threadIdx().x] = 0.0f0
     end
     return
 end
@@ -211,6 +217,18 @@ function k_partition_select!(group_r::SubArray, group_angle::SubArray,
         end
     end
     return
+end
+
+@inline function sum_parallel_double!(a::SubArray, b::SubArray)
+    step = length(a) ÷ 2
+    while step != 0
+        if threadIdx().x <= step
+            a[threadIdx().x] += a[threadIdx().x + step]
+            b[threadIdx().x] += b[threadIdx().x + step]
+        end
+        CUDA.sync_threads()
+        step ÷= 2
+    end
 end
 
 @inline function count_neighbors(counts::AbstractMatrix, i::Integer, j::Integer)
