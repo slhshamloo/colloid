@@ -45,6 +45,9 @@ end
                     katic_order(particles, cell_list, k, neighbors, returngpu=true),
                     threshold=threshold, rmax=rmax)
 
+function pmft_angle_pair()
+end
+
 function local_order(
         particles::RegularPolygons, cell_list::SeqCellList, neighbors::Integer,
         orderfunc::Function; iscomplex::Bool = true, numtype::DataType = Float32)
@@ -278,10 +281,9 @@ function solidliquid_parallel!(particles::RegularPolygons, cell_list::CuCellList
 end
 
 function get_dist_and_angle(particles::RegularPolygons, i::Integer, j::Integer)
-    rij = (particles.centers[1, i] - particles.centers[1, j],
-           particles.centers[2, i] - particles.centers[2, j])
-    rij = (rij[1] - rij[1] ÷ (particles.boxsize[1]/2) * particles.boxsize[1],
-           rij[2] - rij[2] ÷ (particles.boxsize[2]/2) * particles.boxsize[2])
+    rij = apply_parallelogram_boundary(particles,
+        (particles.centers[1, j] - particles.centers[1, i],
+         particles.centers[2, j] - particles.centers[2, i]))
     r = sqrt(rij[1]^2 + rij[2]^2)
     angle = (rij[2] < 0 ? -1 : 1) * acos(rij[1] / r)
     return r, angle
