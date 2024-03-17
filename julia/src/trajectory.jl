@@ -67,7 +67,7 @@ function RegularPolygonsTrajectory(filepath::String)
     end
 end
 
-function RegularPolygonsTrajectory(filepath::String, frames::AbstractUnitRange)
+function RegularPolygonsTrajectory(filepath::String, frames::OrdinalRange)
     jldopen(filepath) do f
         sidenum, radius = f["sidenum"], f["radius"]
     
@@ -91,12 +91,30 @@ function RegularPolygonsTrajectory(filepath::String, frames::AbstractUnitRange)
     end
 end
 
+function framecount(filepath::String)
+    frame = 1
+    jldopen(filepath) do f
+        try
+            while true
+                time = f["frame$frame/time"]
+                frame += 1
+            end
+        catch e
+            frame -= 1
+            if !isa(e, KeyError)
+                throw(e)
+            end
+        end
+    end
+    return frame
+end
+
 Base.getindex(trajectory::RegularPolygonsTrajectory, frame::Int) = RegularPolygonsSnapshot(
     trajectory.sidenum, trajectory.radius, trajectory.boxshears[frame],
     ((trajectory.boxsizes[frame])[1], (trajectory.boxsizes[frame])[2]),
     trajectory.centers[frame], trajectory.angles[frame], trajectory.times[frame])
 
-Base.getindex(trajectory::RegularPolygonsTrajectory, frames::AbstractUnitRange) =
+Base.getindex(trajectory::RegularPolygonsTrajectory, frames::OrdinalRange) =
     RegularPolygonsTrajectory(
         trajectory.sidenum, trajectory.radius, trajectory.boxshears[frames],
         trajectory.boxsizes[frames], trajectory.centers[frames],
@@ -108,3 +126,45 @@ Base.getindex(trajectory::RegularPolygonsTrajectory, frames::AbstractUnitRange) 
 
 @inline particlearea(snapshot::RegularPolygonsSnapshot) = (
     0.5 * snapshot.sidenum * snapshot.radius^2 * sin(2π / snapshot.sidenum))
+
+function calculate_local_order(trajectory::RegularPolygonsTrajectory,
+        type::String, typeparams...; gpu::Bool = false, numtype::DataType = Float32,
+        typekeywords...)
+    if type == "nematic"
+        ordertype = numtype
+    elseif type == "solidliquid"
+        ordertype = UInt32
+    else
+        ordertype = Complex{numtype}
+    end
+    orders = Vector{Vector{ordertype}}(undef, 0)
+    for frame in 1:length(trajectory)
+        particles = RegularPolygons(trajectory[frame], gpu=gpu)
+        if type == "katic"
+            push!(orders, katic_order(particles, typeparams...; numtype=numtype))
+        elseif type == "solidliquid"
+            push!(orders, solidliquid(particles, typeparams...; typekeywords...))
+        end
+    end
+    return orders
+end
+
+function calculate_local_order(filepath::String, frames::OrdinalRange, 
+        type::String, typeparams...; gpu::Bool = false, numtype::DataType = Float32)
+    if type == "nematic"
+        ordertype = numtype
+    elseif type == "solidliquid"
+        ordertype = Int32
+    else
+        ordertype = Complex{numtype}
+    end
+    orders = Vector{Vector{ordertype}}(undef, 0)
+    for frame in frames
+        particles = RegularPolygons(RegularPolygonsSnapshot(filepath, frame), gpu=gpu)
+        cell_list = gpu ? CuCellList(particles) : SeqCellList(particles)
+        if type == "katic"
+            push!(orders, katic_order(particles, cell_list, typeparams[1]; numtype=numtype))
+        end
+    end
+    return orders
+end
