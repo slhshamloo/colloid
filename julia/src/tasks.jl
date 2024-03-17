@@ -24,7 +24,9 @@ struct LocalParamRecorder{T <: Number} <: AbstractRecorder
 
     function LocalParamRecorder(cond::Function, type::String, typeparams...;
                                 numtype::DataType = Float32)
-        if type != "nematic"
+        if type == "solidliquid"
+            numtype = Int32
+        elseif type != "nematic"
             numtype = Complex{numtype}
         end
         values = Vector{Vector{numtype}}(undef, 0)

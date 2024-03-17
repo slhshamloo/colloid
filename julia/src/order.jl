@@ -17,9 +17,33 @@ end
             1im * k * neighbor_angle)) / neighbors, numtype=numtype)
 
 @inline katic_order(particles::RegularPolygons, cell_list::CuCellList, k::Integer,
-    neighbors::Integer = k; numtype::DataType = Float32) = local_order(
-        particles, cell_list, neighbors, (neighbor_r, neighbor_angle) -> exp(
-            1im * k * neighbor_angle) / neighbors, numtype=numtype)
+    neighbors::Integer = k; numtype::DataType = Float32, returngpu::Bool = false
+    ) = local_order(particles, cell_list, neighbors, (neighbor_r, neighbor_angle) -> exp(
+            1im * k * neighbor_angle) / neighbors, numtype=numtype, returngpu=returngpu)
+
+function solidliquid(particles::RegularPolygons, k::Integer, neighbors::Integer = k;
+        threshold::Real = 0.7, rmax::Real = 2 * particles.radius)
+    if isa(particles.centers, CuArray)
+        cell_list = CuCellList(particles)
+        katic_orders = katic_order(particles, cell_list, k, neighbors, returngpu=true)
+        return solidliquid(
+            particles, cell_list, katic_orders, threshold=threshold, rmax=rmax)
+    else
+        cell_list = SeqCellList(particles)
+        katic_orders = katic_order(particles, cell_list, k, neighbors)
+    end
+end
+
+@inline solidliquid(particles::RegularPolygons, cell_list::SeqCellList, k::Integer,
+    neighbors::Integer = k; threshold::Real = 0.7, rmax::Real = 2 * particles.radius
+    ) = solidliquid(particles, cell_list, katic_order(particles, cell_list, k, neighbors),
+                    threshold=threshold, rmax=rmax)
+
+@inline solidliquid(particles::RegularPolygons, cell_list::CuCellList, k::Integer,
+    neighbors::Integer = k; threshold::Real = 0.7, rmax::Real = 2 * particles.radius
+    ) = solidliquid(particles, cell_list,
+                    katic_order(particles, cell_list, k, neighbors, returngpu=true),
+                    threshold=threshold, rmax=rmax)
 
 function local_order(
         particles::RegularPolygons, cell_list::SeqCellList, neighbors::Integer,
@@ -57,19 +81,55 @@ end
 
 function local_order(
         particles::RegularPolygons, cell_list::CuCellList, neighbors::Integer,
-        orderfunc::Function; iscomplex::Bool = true, numtype::DataType = Float32)
+        orderfunc::Function; iscomplex::Bool = true, numtype::DataType = Float32,
+        returngpu::Bool = false)
     maxcount = maximum(cell_list.counts)
     groupcount = 9 * maxcount
     groups_per_block = numthreads ÷ groupcount
     numblocks = particlecount(particles) ÷ groups_per_block + 1
-    orders = (iscomplex ? zeros(Complex{numtype}, particlecount(particles))
-                        : zeros(numtype, particlecount(particles)))
-    orders = CuArray(orders)
+    orders = CuArray(iscomplex ? zeros(Complex{numtype}, particlecount(particles))
+                               : zeros(numtype, particlecount(particles)))
     @cuda(threads=numthreads, blocks=numblocks,
           shmem = 2 * groups_per_block * (groupcount + neighbors) * sizeof(numtype),
           local_order_parallel!(particles, cell_list, orders, orderfunc, neighbors,
                                 maxcount, groupcount, groups_per_block, numtype))
-    return Vector(orders)
+    return returngpu ? orders : Vector(orders)
+end
+
+function solidliquid(
+        particles::RegularPolygons, cell_list::SeqCellList, katic_orders::Vector;
+        threshold::Real = 0.7, rmax::Real = 2 * particles.radius)
+    solidbonds = zeros(UInt32, particlecount(particles))
+    for cell in CartesianIndices(cell_list.cells)
+        i, j = Tuple(cell)
+        for idx in cell_list.cells[i, j]
+            for neighbor_cell in get_neighbors(cell_list.cells, i, j)
+                for neighbor in neighbor_cell
+                    dist = √((particles.centers[1, idx] - particles.centers[1, neighbor])^2
+                           + (particles.centers[2, idx] - particles.centers[2, neighbor])^2)
+                    if dist <= rmax && real(
+                            katic_orders[idx] * conj(katic_orders[neighbor])) > threshold
+                        solidbonds[idx] += 1
+                    end
+                end
+            end
+        end
+    end
+    return solidbonds
+end
+
+function solidliquid(
+        particles::RegularPolygons, cell_list::CuCellList, katic_orders::CuVector;
+        threshold::Real = 0.7, rmax::Real = 2 * particles.radius)
+    maxcount = maximum(cell_list.counts)
+    groupcount = 9 * maxcount
+    groups_per_block = numthreads ÷ groupcount
+    numblocks = particlecount(particles) ÷ groups_per_block + 1
+    solidbonds = CuArray(zeros(Int32, particlecount(particles)))
+    @cuda(threads=numthreads, blocks=numblocks, shmem = groups_per_block * sizeof(Int32),
+          solidliquid_parallel!(particles, cell_list, katic_orders, solidbonds,
+                                threshold, rmax, maxcount, groupcount, groups_per_block))
+    return Vector(solidbonds)
 end
 
 function local_order_parallel!(particles::RegularPolygons, cell_list::CuCellList,
@@ -176,6 +236,47 @@ function calc_order!(particles::RegularPolygons, cell_list::CuCellList,
     return
 end
 
+function solidliquid_parallel!(particles::RegularPolygons, cell_list::CuCellList,
+        katic_orders::CuDeviceVector, solidbonds::CuDeviceVector, threshold::Real,
+        rmax::Real, maxcount::Integer, groupcount::Integer, groups_per_block::Integer)
+    blockbonds = CuDynamicSharedArray(Int32, groups_per_block)
+
+    is_thread_active = threadIdx().x <= groups_per_block * groupcount
+    group, thread = divrem(threadIdx().x - 1, groupcount)
+    group += 1
+    if is_thread_active
+        idx = (blockIdx().x - 1) * groups_per_block + group
+        is_thread_active = idx <= particlecount(particles)
+        if is_thread_active && thread == 0
+            blockbonds[group] = 0
+        end
+    end
+
+    CUDA.sync_threads()
+    if is_thread_active
+        i, j = get_cell_list_indices(particles, cell_list, idx)
+        ineighbor, jneighbor, kneighbor = get_neighbor_indices(
+            cell_list, thread, maxcount, i, j)
+        if kneighbor <= cell_list.counts[ineighbor, jneighbor]
+            neighbor = cell_list.cells[kneighbor, ineighbor, jneighbor]
+            if idx != neighbor
+                dist = √((particles.centers[1, idx] - particles.centers[1, neighbor])^2
+                    + (particles.centers[2, idx] - particles.centers[2, neighbor])^2)
+                if (dist <= rmax && real(katic_orders[idx]
+                        * conj(katic_orders[neighbor])) > threshold)
+                    CUDA.@atomic blockbonds[group] += 1
+                end
+            end
+        end
+    end
+
+    CUDA.sync_threads()
+    if is_thread_active && thread == 0
+        solidbonds[idx] = blockbonds[group]
+    end
+    return
+end
+
 function get_dist_and_angle(particles::RegularPolygons, i::Integer, j::Integer)
     rij = (particles.centers[1, i] - particles.centers[1, j],
            particles.centers[2, i] - particles.centers[2, j])
@@ -201,8 +302,8 @@ function k_partition_select!(group_r::SubArray, group_angle::SubArray,
         while step < groupcount
             if is_thread_active && (thread - 1) % 2step == 0 && thread + step <= groupcount
                 if group_r[thread] > group_r[thread + step]
-                    group_r[thread], group_r[thread + step] = group_r[thread + step],
-                        group_r[thread]
+                    group_r[thread], group_r[thread + step] = (
+                        group_r[thread + step], group_r[thread])
                     group_angle[thread], group_angle[thread + step] = (
                         group_angle[thread + step], group_angle[thread])
                 end
@@ -234,23 +335,23 @@ end
 @inline function count_neighbors(counts::AbstractMatrix, i::Integer, j::Integer)
     (counts[mod(i - 2, size(counts, 1)) + 1, mod(j - 2, size(counts, 2)) + 1]
      + counts[mod(i - 2, size(counts, 1)) + 1, j]
-     + counts[mod(i - 2, size(counts, 1)) + 1, mod(j, size(counts, 1)) + 1]
-     + counts[i, mod(j - 2, size(counts, 1)) + 1]
+     + counts[mod(i - 2, size(counts, 1)) + 1, mod(j, size(counts, 2)) + 1]
+     + counts[i, mod(j - 2, size(counts, 2)) + 1]
      + counts[i, j] - 1
-     + counts[i, mod(j, size(counts, 1)) + 1]
+     + counts[i, mod(j, size(counts, 2)) + 1]
      + counts[mod(i, size(counts, 1)) + 1, mod(j - 2, size(counts, 2)) + 1]
      + counts[mod(i, size(counts, 1)) + 1, j]
-     + counts[mod(i, size(counts, 1)) + 1, mod(j, size(counts, 1)) + 1])
+     + counts[mod(i, size(counts, 1)) + 1, mod(j, size(counts, 2)) + 1])
 end
 
 @inline function get_neighbors(cells::AbstractMatrix, i::Integer, j::Integer)
     (cells[mod(i - 2, size(cells, 1)) + 1, mod(j - 2, size(cells, 2)) + 1],
      cells[mod(i - 2, size(cells, 1)) + 1, j],
-     cells[mod(i - 2, size(cells, 1)) + 1, mod(j, size(cells, 1)) + 1],
-     cells[i, mod(j - 2, size(cells, 1)) + 1],
+     cells[mod(i - 2, size(cells, 1)) + 1, mod(j, size(cells, 2)) + 1],
+     cells[i, mod(j - 2, size(cells, 2)) + 1],
      cells[i, j],
-     cells[i, mod(j, size(cells, 1)) + 1],
+     cells[i, mod(j, size(cells, 2)) + 1],
      cells[mod(i, size(cell_list.counts, 1)) + 1, mod(j - 2, size(cells, 2)) + 1],
      cells[mod(i, size(cells, 1)) + 1, j],
-     cells[mod(i, size(cells, 1)) + 1, mod(j, size(cells, 1)) + 1])
+     cells[mod(i, size(cells, 1)) + 1, mod(j, size(cells, 2)) + 1])
 end
