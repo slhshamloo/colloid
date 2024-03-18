@@ -45,7 +45,59 @@ end
                     katic_order(particles, cell_list, k, neighbors, returngpu=true),
                     threshold=threshold, rmax=rmax)
 
-function pmft_angle_pair()
+function pmft_angle_pair(particles::RegularPolygons;
+        bins::Tuple{<:Integer, <:Integer} = (1024, 1024),
+        rmax::Real = 2.5 * particles.radius)
+    if isa(particles.centers, CuArray)
+        return pmft_angle_pair(particles, CuCellList(particles), bins=bins, rmax=rmax)
+    else
+        return pmft_angle_pair(particles, SeqCellList(particles), bins=bins, rmax=rmax)
+    end
+end
+
+function pmft_angle_pair(particles::RegularPolygons, cell_list::SeqCellList;
+        bins::Tuple{<:Integer, <:Integer} = (1024, 1024),
+        rmax::Real = 2.5 * particles.radius)
+    angle_range = 2π / particles.sidenum
+    binsize = angle_range ./ bins
+    partition_function = zeros(Int32, bins)
+
+    for cell in CartesianIndices(cell_list.cells)
+        i, j = Tuple(cell)
+        for idx in cell_list.cells[i, j]
+            for neighbor_cell in get_neighbors(cell_list.cells, i, j)
+                for neighbor in neighbor_cell
+                    r, theta = get_dist_and_angle(particles, idx, neighbor)
+                    if r <= rmax
+                        theta1 = mod(particles.angles[idx] - theta, angle_range)
+                        theta2 = mod(particles.angles[neighbor] - theta + π, angle_range)
+                        bin1 = Int(theta1 ÷ binsize[1]) + 1
+                        bin2 = Int(theta2 ÷ binsize[2]) + 1
+                        partition_function[bin1, bin2] += 1
+                        partition_function[bin2, bin1] += 1
+                    end
+                end
+            end
+        end
+    end
+
+    return Matrix(log.(partition_function))
+end
+
+function pmft_angle_pair(particles::RegularPolygons, cell_list::CuCellList;
+        bins::Tuple{<:Integer, <:Integer} = (1024, 1024),
+        rmax::Real = 2.5 * particles.radius)
+    angle_range = 2π / particles.sidenum
+    binsize = angle_range ./ bins
+    partition_function = CuArray(zeros(Int32, bins))
+    maxcount = maximum(cell_list.counts)
+    groupcount = 9 * maxcount
+    groups_per_block = numthreads ÷ groupcount
+    numblocks = particlecount(particles) ÷ groups_per_block + 1
+    @cuda(threads=numthreads, blocks=numblocks, pmft_angle_pair_parallel!(
+        particles, cell_list, partition_function, Float32.(binsize),
+        angle_range, rmax, maxcount, groupcount, groups_per_block))
+    return Matrix(log.(partition_function))
 end
 
 function local_order(
@@ -276,6 +328,37 @@ function solidliquid_parallel!(particles::RegularPolygons, cell_list::CuCellList
     CUDA.sync_threads()
     if is_thread_active && thread == 0
         solidbonds[idx] = blockbonds[group]
+    end
+    return
+end
+
+function pmft_angle_pair_parallel!(particles::RegularPolygons, cell_list::CuCellList,
+        partition_function::CuDeviceMatrix, binsize::Tuple{<:Real, <:Real},
+        angle_range::Real, rmax::Real, maxcount::Integer, groupcount::Integer,
+        groups_per_block::Integer)
+    if threadIdx().x <= groups_per_block * groupcount
+        group, thread = divrem(threadIdx().x - 1, groupcount)
+        group += 1
+        idx = (blockIdx().x - 1) * groups_per_block + group
+        if idx <= particlecount(particles)
+            i, j = get_cell_list_indices(particles, cell_list, idx)
+            ineighbor, jneighbor, kneighbor = get_neighbor_indices(
+                cell_list, thread, maxcount, i, j)
+            if kneighbor <= cell_list.counts[ineighbor, jneighbor]
+                neighbor = cell_list.cells[kneighbor, ineighbor, jneighbor]
+                if idx != neighbor
+                    r, theta = get_dist_and_angle(particles, idx, neighbor)
+                    if r <= rmax
+                        theta1 = mod(particles.angles[idx] - theta, angle_range)
+                        theta2 = mod(particles.angles[neighbor] - theta + π, angle_range)
+                        bin1 = Int(theta1 ÷ binsize[1]) + 1
+                        bin2 = Int(theta2 ÷ binsize[2]) + 1
+                        CUDA.@atomic partition_function[bin1, bin2] += 1
+                        CUDA.@atomic partition_function[bin2, bin1] += 1
+                    end
+                end
+            end
+        end
     end
     return
 end
