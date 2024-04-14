@@ -158,7 +158,7 @@ function get_dist_and_angle(particles::RegularPolygons, i::Integer, j::Integer)
         (particles.centers[1, j] - particles.centers[1, i],
          particles.centers[2, j] - particles.centers[2, i]))
     r = sqrt(rij[1]^2 + rij[2]^2)
-    angle = (rij[2] < 0 ? -1 : 1) * acos(rij[1] / r)
+    angle = atan(rij[2], rij[1])
     return r, angle
 end
 

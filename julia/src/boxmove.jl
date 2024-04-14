@@ -147,7 +147,7 @@ end
 function propose_box_update!(sim::HPMCSimulation, updater::AreaUpdater)
     CUDA.@allowscalar lxold, lyold = sim.particles.boxsize
     newarea = lxold * lyold + 2 * (rand() - 0.5) * updater.areachange
-    lxnew = √(lxold / lyold * newarea)
+    lxnew = sqrt(lxold / lyold * newarea)
     lynew = lyold / lxold * lxnew
     CUDA.@allowscalar sim.particles.boxsize[1], sim.particles.boxsize[2] = lxnew, lynew
     return propose_box_update!(sim, (lxold=lxold, lyold=lyold, lxnew=lxnew, lynew=lynew),

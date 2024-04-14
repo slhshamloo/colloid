@@ -7,7 +7,7 @@ function is_overlapping(particles::RegularPolygons, i::Integer, j::Integer)
         return false
     end
 
-    centerangle = (dist[2] < 0 ? -1 : 1) * acos(dist[1] / distnorm)
+    centerangle = atan(dist[2], dist[1])
     return (_is_vertex_overlapping(particles, i, j, distnorm, centerangle)
             || _is_vertex_overlapping(particles, j, i, distnorm, π + centerangle))
 end
@@ -16,7 +16,7 @@ end
     dist = apply_parallelogram_boundary(particles,
         (particles.centers[1, j] - particles.centers[1, i],
          particles.centers[2, j] - particles.centers[2, i]))
-    distnorm = √(dist[1]^2 + dist[2]^2)
+    distnorm = sqrt(dist[1]^2 + dist[2]^2)
     return (distnorm <= 2 * particles.bisector, distnorm > 2 * particles.radius,
             dist, distnorm)
 end
@@ -59,14 +59,14 @@ end
         center::Tuple{<:Real, <:Real}, radius::Real)
     dist = apply_parallelogram_boundary(particles,
         (center[1] - particles.centers[1, index], center[2] - particles.centers[2, index]))
-    distnorm = √(dist[1]^2 + dist[2]^2)
+    distnorm = sqrt(dist[1]^2 + dist[2]^2)
     return (distnorm <= radius + particles.bisector, distnorm > radius + particles.radius,
             dist, distnorm)
 end
 
 function _is_disk_over_side(particles::RegularPolygons, index::Integer,
         dist::Tuple{<:Real, <:Real}, distnorm::Real, radius::Real)
-    centerangle = (dist[2] < 0 ? -1 : 1) * acos(dist[1] / distnorm)
+    centerangle = atan(dist[2], dist[1])
     particles_angle = 2π / particles.sidenum
     vertexnum = fld(centerangle - particles.angles[index], particles_angle)
     
@@ -78,7 +78,7 @@ function _is_disk_over_side(particles::RegularPolygons, index::Integer,
     r1 = (dist[1] - v1[1], dist[2] - v1[2])
     v12 = (v2[1] - v1[1], v2[2] - v1[2])
 
-    v12norm = √(v12[1]^2 + v12[2]^2)
+    v12norm = sqrt(v12[1]^2 + v12[2]^2)
     cross_product = r1[1] * v12[2] - r1[2] * v12[1]
     normal_distance = cross_product / v12norm
 

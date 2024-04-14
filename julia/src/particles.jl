@@ -80,7 +80,7 @@ end
 function crystallize!(particles::RegularPolygons,
         gridcount::Integer = particlecount(particles),
         constraint::Function = (particles, centers) -> trues(size(centers, 2)))
-    particles_per_side = ceil(Int, √(gridcount))
+    particles_per_side = ceil(Int, sqrt(gridcount))
     shortside = minimum(particles.boxsize)
     shortdim = argmin(particles.boxsize)
     spacing = shortside / particles_per_side
