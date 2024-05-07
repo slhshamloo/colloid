@@ -240,7 +240,8 @@ end
     updater.rejected_moves[params.choice] += 1
 end
 
-@inline function reverse_area_update!(sim::HPMCSimulation, scale::AbstractVector)
+@inline function reverse_area_update!(
+        sim::HPMCSimulation, scale::Union{AbstractVector, Tuple{<:Real, <:Real}})
     CUDA.@allowscalar shear = sim.particles.boxshear[]
     sim.particles.centers[1, :] .-= sim.particles.centers[2, :] * shear
     sim.particles.centers ./= scale
