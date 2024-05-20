@@ -28,6 +28,9 @@ RegularPolygons(snapshot::RegularPolygonsSnapshot; gpu=false) =
         snapshot.centers, snapshot.angles; gpu=gpu, boxshear=snapshot.boxshear)
 
 function RegularPolygonsSnapshot(filepath::String, frame::Integer)
+    if !endswith(filepath, ".jld2")
+        filepath *= ".jld2"
+    end
     jldopen(filepath) do f
         fstr = "frame$frame/"
         return RegularPolygonsSnapshot(f["sidenum"], f["radius"], f[fstr*"boxshear"],
@@ -36,6 +39,9 @@ function RegularPolygonsSnapshot(filepath::String, frame::Integer)
 end
 
 function RegularPolygonsTrajectory(filepath::String)
+    if !endswith(filepath, ".jld2")
+        filepath *= ".jld2"
+    end
     jldopen(filepath) do f
         sidenum, radius = f["sidenum"], f["radius"]
     
@@ -68,6 +74,9 @@ function RegularPolygonsTrajectory(filepath::String)
 end
 
 function RegularPolygonsTrajectory(filepath::String, frames::OrdinalRange)
+    if !endswith(filepath, ".jld2")
+        filepath *= ".jld2"
+    end
     jldopen(filepath) do f
         sidenum, radius = f["sidenum"], f["radius"]
     
@@ -92,6 +101,9 @@ function RegularPolygonsTrajectory(filepath::String, frames::OrdinalRange)
 end
 
 function framecount(filepath::String)
+    if !endswith(filepath, ".jld2")
+        filepath *= ".jld2"
+    end
     frame = 1
     jldopen(filepath) do f
         try
