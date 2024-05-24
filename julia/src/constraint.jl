@@ -108,14 +108,7 @@ function count_violations_parallel(particles::RegularPolygons, constraints::RawC
     end
     CUDA.sync_threads()
 
-    i = blockDim().x ÷ 2
-    while i != 0
-        if thread <= i
-            blockviolations[thread] += blockviolations[thread + i]
-        end
-        CUDA.sync_threads()
-        i ÷= 2
-    end
+    sum_parallel!(blockviolations)
     if thread == 1
         violation_counts[blockIdx().x] = blockviolations[1]
     end
