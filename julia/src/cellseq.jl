@@ -23,9 +23,9 @@ end
 @inline function get_cell_list_indices(particles::RegularPolygons,
         gridsize::Tuple{<:Integer, <:Integer}, width::Tuple{<:Real, <:Real}, idx::Integer)
     shearshift = particles.boxsize[1] / 2 - particles.centers[2, idx] * particles.boxshear[]
-    i = min(gridsize[1], Int((particles.centers[1, idx] + shearshift) ÷ width[1] + 1))
-    j = min(gridsize[2], Int((particles.centers[2, idx] + particles.boxsize[2] / 2)
-                             ÷ width[2] + 1))
+    i = mod(Int((particles.centers[1, idx] + shearshift) ÷ width[1]), gridsize[1]) + 1
+    j = mod(Int((particles.centers[2, idx] + particles.boxsize[2] / 2) ÷ width[2]),
+            gridsize[2]) + 1
     return i, j
 end
 
