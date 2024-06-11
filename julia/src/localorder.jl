@@ -10,9 +10,11 @@ function local_order(
             neighbor_angle = Vector{numtype}(undef, 0)
             for neighbor_cell in get_neighbors(cell_list.cells, i, j)
                 for neighbor in neighbor_cell
-                    r, angle = get_dist_and_angle(particles, idx, neighbor)
-                    push!(neighbor_r, r)
-                    push!(neighbor_angle, angle)
+                    if idx != neighbor
+                        r, angle = get_dist_and_angle(particles, idx, neighbor)
+                        push!(neighbor_r, r)
+                        push!(neighbor_angle, angle)
+                    end
                 end
             end
             if neighbors > 0
@@ -20,13 +22,9 @@ function local_order(
                     local_indices = partialsortperm(neighbor_r, 1:neighbors)
                     neighbor_r = neighbor_r[local_indices]
                     neighbor_angle = neighbor_angle[local_indices]
-                    orders[idx] += orderfunc(neighbors, neighbor_r, neighbor_angle)
-                end
-            else
-                if length(neighbor_r) > 0
-                    orders[idx] += orderfunc(neighbor_r, neighbor_angle)
                 end
             end
+            orders[idx] += orderfunc(neighbor_r, neighbor_angle)
         end
     end
     return orders
@@ -226,7 +224,7 @@ end
      cells[i, mod(j - 2, size(cells, 2)) + 1],
      cells[i, j],
      cells[i, mod(j, size(cells, 2)) + 1],
-     cells[mod(i, size(cell_list.counts, 1)) + 1, mod(j - 2, size(cells, 2)) + 1],
+     cells[mod(i, size(cells, 1)) + 1, mod(j - 2, size(cells, 2)) + 1],
      cells[mod(i, size(cells, 1)) + 1, j],
      cells[mod(i, size(cells, 1)) + 1, mod(j, size(cells, 2)) + 1])
 end
