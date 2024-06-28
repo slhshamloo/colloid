@@ -31,19 +31,24 @@ function apply_translation!(sim::HPMCSimulation, randnums::Matrix{<:Real}, idx::
     x, y = r * cos(θ), r * sin(θ)
 
     i, j = get_cell_list_indices(sim.particles, sim.cell_list, idx)
-    deleteat!(sim.cell_list.cells[i, j], findfirst(==(idx), sim.cell_list.cells[i, j]))
-    move!(sim.particles, idx, x, y)
-    i, j = get_cell_list_indices(sim.particles, sim.cell_list, idx)
-    push!(sim.cell_list.cells[i, j], idx)
-
-    if has_violation(sim, randnums, idx, i, j)
-        move!(sim.particles, idx, -x, -y)
-        pop!(sim.cell_list.cells[i, j])
+    cell_index = findfirst(==(idx), sim.cell_list.cells[i, j])
+    if !isnothing(cell_index)
+        deleteat!(sim.cell_list.cells[i, j], cell_index)
+        move!(sim.particles, idx, x, y)
         i, j = get_cell_list_indices(sim.particles, sim.cell_list, idx)
         push!(sim.cell_list.cells[i, j], idx)
-        sim.rejected_translations += 1
+
+        if has_violation(sim, randnums, idx, i, j)
+            move!(sim.particles, idx, -x, -y)
+            pop!(sim.cell_list.cells[i, j])
+            i, j = get_cell_list_indices(sim.particles, sim.cell_list, idx)
+            push!(sim.cell_list.cells[i, j], idx)
+            sim.rejected_translations += 1
+        else
+            sim.accepted_translations += 1
+        end
     else
-        sim.accepted_translations += 1
+        sim.rejected_translations += 1
     end
 end
 
