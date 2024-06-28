@@ -7,7 +7,7 @@ function update!(sim::HPMCSimulation, compressor::ForcefulCompressor)
             old_cell_list = sim.cell_list
             if sim.gpu
                 sim.cell_list = CuCellList(sim.particles, sim.cell_list.shift,
-                    maxwidth=minimum(pos_scale)*get_maxwidth(sim.particles))
+                    maxwidth = minimum(pos_scale) * 2 * √2 * sim.particles.radius)
                 violations = count_violations_gpu(sim.particles, sim.constraints)
             else
                 sim.cell_list = SeqCellList(sim.particles)
