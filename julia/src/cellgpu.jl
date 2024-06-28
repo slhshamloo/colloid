@@ -10,11 +10,11 @@ end
 function CuCellList(particles::RegularPolygons, shift::AbstractArray = [0.0f0, 0.0f0];
                     maxwidth::Real = 0.0f0, max_particle_per_cell=20)
     if iszero(maxwidth)
-        maxwidth = get_maxwidth(particles)
+        maxwidth = 2 * √2 * particles.radius
     end
     boxsize = Array(particles.boxsize)
-    width = (boxsize[1] / ceil(boxsize[1] / maxwidth),
-             boxsize[2] / ceil(boxsize[2] / maxwidth))
+    width = (max(boxsize[1] / ceil(boxsize[1] / maxwidth), 2 * particles.radius),
+             max(boxsize[2] / ceil(boxsize[2] / maxwidth), 2 * particles.radius))
     m, n = Int(boxsize[1] ÷ width[1]), Int(boxsize[2] ÷ width[2])
     cells = Array{Int32, 3}(undef, max_particle_per_cell, m, n)
     counts = zeros(Int32, m, n)
@@ -32,9 +32,6 @@ function CuCellList(particles::RegularPolygons, shift::AbstractArray = [0.0f0, 0
 end
 
 Adapt.@adapt_structure CuCellList
-
-@inline get_maxwidth(particles::RegularPolygons) = 
-    particles.sidenum <= 4 ? 2 * particles.radius : 2 * √2 * particles.radius
 
 @inline function get_cell_list_indices(particles::RegularPolygons,
         gridsize::Tuple{<:Integer, <:Integer}, width::Tuple{<:Real, <:Real},
