@@ -1,5 +1,15 @@
 abstract type CellList end
+"""
+    CellList
 
+Abstract type for cell lists which help find neighboring particles.
+"""
+
+"""
+    CuCellList <: CellList
+
+Cell list structure for CPU simulations.
+"""
 struct SeqCellList <: CellList
     cells::Matrix{Vector{Int}}
     width::Tuple{<:Real, <:Real}
@@ -29,6 +39,11 @@ end
     return i, j
 end
 
+"""
+    get_cell_list_indices(particles, cell_list, idx)
+
+Find the coordinates of particle with index `idx` in the `cell_list`.
+"""
 @inline function get_cell_list_indices(particles::RegularPolygons, cell_list::SeqCellList,
                                        idx::Integer)
     get_cell_list_indices(particles, size(cell_list.cells), cell_list.width, idx)
@@ -50,6 +65,11 @@ function has_overlap(particles::RegularPolygons, cell_list::SeqCellList,
     return false
 end
 
+"""
+    has_overlap(particles, cell_list)
+
+Find whether or not any particles in the system are overlaping.
+"""
 function has_overlap(particles::RegularPolygons, cell_list::SeqCellList)
     for cell in CartesianIndices(cell_list.cells)
         i, j = Tuple(cell)
@@ -75,6 +95,11 @@ function has_overlap(particles::RegularPolygons, cell_list::SeqCellList)
     return false
 end
 
+"""
+    count_overlaps(particles, cell_list)
+
+Count the number of overlaps between the particles in the system.
+"""
 function count_overlaps(particles::RegularPolygons, cell_list::SeqCellList)
     overlap_count = 0
     for cell in CartesianIndices(cell_list.cells)

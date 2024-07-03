@@ -1,5 +1,17 @@
 abstract type ParticleCollection end
+"""
+    ParticleCollection
 
+Abstract type for particle collections that contain particle and box information.
+"""
+
+"""
+    RegularPolygons <: ParticleCollection
+
+A collection of regular polygons in a box.
+
+To speed up calculations, the structure contains the `bisector` length.
+"""
 struct RegularPolygons{T<:Real, V<:AbstractVector, M<:AbstractMatrix,
                        VB<:AbstractVector, VS<:AbstractVector} <: ParticleCollection
     sidenum::Int
@@ -13,9 +25,23 @@ struct RegularPolygons{T<:Real, V<:AbstractVector, M<:AbstractMatrix,
     angles::V
 end
 
+"""
+    RegularPolygons{T}(sidenum, radius, boxsize::Tuple{<:Real, <:Real}, centers, angels; boxshear::Real = 0, gpu=false) where {T<:Real}
+    RegularPolygons{T}(sidenum, radius, boxsize::Tuple{<:Real, <:Real}, count; boxshear::Real = 0, gpu=false) where {T<:Real}
+
+Make a collection of regular polygon particles with `sidenum` sides in a box.
+
+The first method makes the particle collection with `centers` (center coordinates in a
+matrix with column-major order) and `angles` of the particles specified. The second method
+makes a particle collection with `count` particles with `centers` and `angles` arrays
+initialized by `undef`.
+
+`boxshear` is the tangent of the shear angle of the box, defined as the complement of the
+complement of the accute angle of the box parallelogram
+"""
 function RegularPolygons{T}(sidenum::Integer, radius::Real, boxsize::Tuple{<:Real, <:Real},
         centers::AbstractMatrix, angles::AbstractArray;
-        boxshear::Real = 0.0, gpu::Bool = false) where {T<:Real}
+        boxshear::Real = 0, gpu::Bool = false) where {T<:Real}
     bisector = radius * cos(π / sidenum)
 
     if gpu
@@ -57,8 +83,18 @@ end
 
 Adapt.@adapt_structure RegularPolygons
 
+"""
+    particlecount(particles)
+
+Get the number of particles in the particle collection
+"""
 @inline particlecount(particles::RegularPolygons) = size(particles.centers, 2)
 
+"""
+    particlecount(particles)
+
+Calculate the area (2D volume) of the particles in the particle collection.
+"""
 @inline particlearea(particles::RegularPolygons) = (
     0.5 * particles.sidenum * particles.radius^2 * sin(2π / particles.sidenum))
 
@@ -77,6 +113,18 @@ function _build_vertices(sidenum::Integer, radius::Real,
     return vertices
 end
 
+"""
+    cystallize!(particles[, gridcount, constaint::Function])
+
+Arrange the particles in a grid spanning the full box.
+
+The number of points of the grid is the closest square number to `gridcount` which is also
+larger than it. The grid is filled starting from the shorter side of the box. Constraints
+for the position of the particles can be specified by the `constraint` function, which takes
+the particle collection as the first arguments and the column-major `centers` matrix of the
+particle positions as the second arguments and returns a boolean vector that identifies
+which of the coordinate pairs stored in each column of `centers` is valid.
+"""
 function crystallize!(particles::RegularPolygons,
         gridcount::Integer = particlecount(particles),
         constraint::Function = (particles, centers) -> trues(size(centers, 2)))
@@ -107,6 +155,11 @@ function crystallize!(particles::RegularPolygons,
     particles.angles .= 0
 end
 
+"""
+    move!(particles, idx, x, y)
+
+Move the particle with index `idx` while applying periodic boundary conditions.
+"""
 @inline function move!(particles::RegularPolygons, idx::Integer, x::Real, y::Real)
     particles.centers[1, idx] += x
     particles.centers[2, idx] += y

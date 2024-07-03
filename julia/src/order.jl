@@ -1,3 +1,21 @@
+"""
+    katic_order(particles, k[, neighbors]; numtype=Float32)
+
+Calculate the ``k``-atic order of the particles.
+
+The ``k``-atic order for particle ``i`` is defined as
+```math
+\\Psi_k(i) = \\frac{1}{N_b}\\sum_{j=1}^{N_b}e^{ik\\theta_{ij}}
+```
+where ``N_b`` is the number of neighbors of the particle, ``j`` iterates through the
+closest neighbors of the particle, and ``\\theta_{ij}`` is the angle between the orientation
+of particles ``i`` and ``j``. The ``k`` parameter governs the symmetry of the order
+parameter.
+
+If not specified, the number of neighbors is set equal to ``k``. If `neighbors` is set
+equal to 0, then every particle in the neighboring cells of the particle is counted as a
+neighbor.
+"""
 function katic_order(particles::RegularPolygons, k::Integer,
         neighbors::Integer = k; numtype::DataType = Float32)
     if isa(particles.centers, CuArray)
@@ -21,6 +39,21 @@ end
     ) = local_order(particles, cell_list, neighbors, (neighbor_r, neighbor_angle) -> exp(
             1im * k * neighbor_angle) / neighbors, numtype=numtype, returngpu=returngpu)
 
+"""
+    solidliquid(particles, k[, neighbors]; numtype=Float32; threshold=0.7, rmax = 2 * particles.radius)
+
+Counts the solid bonds of the particles using the dot product of the ``k``-atic orders.
+
+If the dot product of the ``k``-atic order parameter of a particle and its neighbor is
+larger than `threshold`, then the bond is counted as a solid bond. Note that the dot product
+of two complex number ``x`` and ``y`` is equal to ``xy*``.
+
+``k`` and `neighbors` are the parameters of the ``k``-atic order of the particles. The
+neighbors that are counted for the solid bonds are the ones that are at most a distance
+`rmax` away from the particle.
+
+The ``k``-atic order is calculated by the [`katic_order`](@ref) method.
+"""
 function solidliquid(particles::RegularPolygons, k::Integer, neighbors::Integer = k;
         threshold::Real = 0.7, rmax::Real = 2 * particles.radius)
     if isa(particles.centers, CuArray)

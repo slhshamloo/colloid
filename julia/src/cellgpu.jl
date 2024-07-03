@@ -1,3 +1,8 @@
+"""
+    CuCellList <: CellList
+
+Cell list structure for GPU simulations.
+"""
 struct CuCellList{T<:Real, A<:AbstractArray, M<:AbstractMatrix,
                   V<:AbstractVector} <: CellList
     width::Tuple{T, T}
@@ -7,16 +12,30 @@ struct CuCellList{T<:Real, A<:AbstractArray, M<:AbstractMatrix,
     counts::M
 end
 
+"""
+    CuCellList(particles[, shift]; maxwidth=0, max_particles_per_cell=20)
+
+Make a cell list structure for the GPU.
+
+# Arguments
+-`particles::ParticleCollection`: The particle collection. For now only accepts
+    `RegularPolygons`.
+-`shift::AbstractArray = [0.0f0, 0.0f0]`: Controls how much the cell grid is shifted.
+    Since the GPU Monte Carlo scheme chooses particles from cells in the cell list, the cell
+    list needs to be shifted every step to retain the ergodicity.
+-`maxwidth::Real = 2 * √2 * particles.radius`: The maximum side length of the cell. The
+    actual side length of the cells is set such that there is an integer number of cells on
+    each side.
+-`max_particles_per_cell::Integer = 20`: the preallocated number of particles in each cell.
+"""
 function CuCellList(particles::RegularPolygons, shift::AbstractArray = [0.0f0, 0.0f0];
-                    maxwidth::Real = 0.0f0, max_particle_per_cell=20)
-    if iszero(maxwidth)
-        maxwidth = 2 * √2 * particles.radius
-    end
+                    maxwidth::Real = 2 * √2 * particles.radius,
+                    max_particles_per_cell::Integer=20)
     boxsize = Array(particles.boxsize)
     width = (max(boxsize[1] / ceil(boxsize[1] / maxwidth), 2 * particles.radius),
              max(boxsize[2] / ceil(boxsize[2] / maxwidth), 2 * particles.radius))
     m, n = Int(boxsize[1] ÷ width[1]), Int(boxsize[2] ÷ width[2])
-    cells = Array{Int32, 3}(undef, max_particle_per_cell, m, n)
+    cells = Array{Int32, 3}(undef, max_particles_per_cell, m, n)
     counts = zeros(Int32, m, n)
 
     cells = CuArray(cells)
