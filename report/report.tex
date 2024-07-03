@@ -1,0 +1,94 @@
+\documentclass[12pt,a4paper]{article}
+\usepackage{algorithm, algpseudocode, amsmath, amssymb, amsthm, bm, csquotes, emf, empheq, geometry, graphicx, hyperref, listings, mhchem, multirow, siunitx, slashbox, subcaption, upgreek}
+\usepackage[italicdiff]{physics}
+%\usepackage[section]{placeins}
+\usepackage[justification=centering]{caption}
+\usepackage[column=O]{cellspace}
+\hypersetup{colorlinks=true, urlcolor=cyan}
+
+\title{Interaction of Disk Colloidal Particles with Media of Regular Polygons}
+\author{Saleh Shamloo Ahmadi, Mohammad Reza Ejtehadi}
+%\date{}
+
+\makeatletter
+\g@addto@macro\bfseries{\boldmath}
+\makeatother
+
+\setlength\cellspacetoplimit{5pt}
+\setlength\cellspacebottomlimit{3pt}
+\newcommand{\multlinecell}[1]{\begin{tabular}[c]{@{}c@{}}#1\end{tabular}}
+
+\newcommand{\qfrac}[2]{\left(\frac{#1}{#2}\right)}
+\newcommand{\fsqrt}[2]{\sqrt{\frac{#1}{#2}}}
+\newcommand{\ddfrac}[2]{{\displaystyle\frac{\displaystyle #1}{\displaystyle #2}}}
+\newcommand{\pdvc}[3]{\qfrac{\partial #1}{\partial #2}_{#3}}
+\newcommand{\dbar}{{d\mkern-7mu\mathchar'26\mkern-2mu}}
+\newcommand*{\defeq}{\mathrel{\vcenter{\baselineskip0.5ex \lineskiplimit0pt
+			\hbox{\scriptsize.}\hbox{\scriptsize.}}}
+	=}
+
+\begin{document}
+	\maketitle
+	\begin{abstract}
+		
+	\end{abstract}
+	\section{Introduction}
+	\section{Model and Methods}
+	We study hard disks interacting with hard regular polygons. The particles and the disks interact
+	purely via volume exclusion. The embedding of disks in the medium introduces defects in the
+	crystal structure of the polygons. We analyze how the radius of one disk, and the distance of
+	two identical disks, affect the size and intensity of these defects. We use the defects of the
+	medium as an analogue for the energy of the configuration, and hence measure the intensity of
+	the interaction of the disks through it.
+
+	Monte Carlo (MC) simulations of $N$ identical polygonal particles with $n$ sides ($n$-gons) of
+	diameter $\sigma$ and disks of radius $r$ were performed in the $NPT$ ensemble. The shape of the
+	simulation box is a parallelogram (and not a simple rectangle, in order to allow the system to
+	equilibrate more easily into the optimal configuration). The MC moves consist of translational
+	and rotational moves for single polygons, changing the length of one of the sides of the
+	simulation box, and shearing the simulation box. The dimensionless pressure of the system is
+	defined as $P^*=P\sigma^2/k_BT$, where $T$ is the temperature of the system and $k_BT = 1$ is
+	fixed (The exact value of $k_BT$ only affects the dimensions of pressure).
+
+	We use our own custom Julia code for the simulation. HOOMD-blue offers great capabilities for
+	hard-particle MC simulations, but it has limitations regarding 2D systems. In particular, it is
+	not possible to introduce external constraints on the systems, like the disks in our
+	simulations.
+
+	Systems were initialized close to the dense packing of the polygons, and the disks were embedded
+	into the systems by cutting out "holes" in the structure. This was done to avoid making extra
+	defects in the system due to the mismatch of different regions in differently oriented dense
+	packings, and only count the imperfections due to the presence of the disks.
+
+	The MC moves are proposed in "sweeps", where each sweep consists of one move per particle and
+	one box move. in each simulation, $\num{2e6}$ sweeps were performed for equilibriating the
+	system (which includes the tuning of the size of each move) and measuremend were performed
+	in the next $\num{2e6}$ sweeps.
+
+	To quantify the amount of defects in the system, we calculate the $k$-atic order of particles.
+	The smaller this parameter is, the more defects the system has. The $k$-atic order of the $i$th
+	particle is given by
+	\begin{equation}
+		\psi_k(i) = \frac{1}{N_b}\sum_{j=1}^{N_b}e^{ik\theta_{ij}}
+	\end{equation}
+	where $N_b$ is the number of neighbors, $j$ iterates through the neighbors of the particle, and
+	$\theta_{ij}$ is the angle between the orientations of particles $i$ and $j$. The $k$ parameter
+	governs the symmetry of the order parameter and typically matches the number of neighbors to be
+	found for each particle. So we choose $N_b = k$ and choose $k$ according to the symmetry of the
+	dense packing for each system. We also calculate the mean orientation of the system, defined as
+	\begin{equation}
+		\Phi_k = \frac{1}{N}\abs{\sum_{j=1}^N e^{ik\theta_j}}
+	\end{equation}
+	to compare to the $k$-atic order and show how only the $k$-atic order can be used as a suitable
+	parameter for detecting defects in the system.
+
+	Four sets of simulations were performed:
+	\begin{enumerate}
+		\item A simulation of only the polygons with no disk, to reproduce the work of Shen et al
+		and check the correctness of the simulation.
+		\item Systems with one disk in the center, with varying radii.
+		\item Systems with two disks on fixed coordinates.
+		\item Systems with two disks were the distance between them scales with the side-length
+		of the simulation box which aligns with the line passing through the centers of the disks.
+	\end{enumerate}
+\end{document}
