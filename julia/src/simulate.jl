@@ -1,36 +1,7 @@
 """
-    HPMCSimulation(count, sidenum, radius, boxsize; boxshear=0, seed=-1, gpu=false, double=false, beta=1, potential=nothing, pairpotential=nothing)
-    HPMCSimulation(particles; ...)
+    HPMCSimulation
 
-Make simulation structure containing all the information about the system.
-
-The first method makes particle collection (for now, only regualr polygons) with random
-initial configuration (made with`undef` arrays to be exact), while the second takes the
-particle collection as input.
-
-# Arguments
--`particles::ParticleCollection`: Pre-built particle collection passed to the simulation.
-    For now only accepts `RegularPolygons`.
--`count::Integer`: the number of particles.
--`sidenum::Integer`: the number of sides of the regular polygons.
--`radius::Real`: the radius of the particles.
--`boxsize::Tuple{<:Real, <:Real}`: the dimensions of the simulation box.
--`boxshear::Real = 0`: the tangent of the shear angle of the box, defined as the complement
-    of the complement of the accute angle of the box parallelogram.
--`seed::Integer = -1`: The seed for initializing the random generator. If set to -1, a
-    random seed will be passed to the generator.
--`gpu::Bool = false`: whether to use CUDA gpu acceleration or not.
--`double::Bool = false`: whether to use double-precision floating-point numbers for
-    calculations or single-presision ones.
--`beta::Real = 1`: the inverse temperature of the system (more precisely, ``1 / k_B T``),
-    used for the Monte Carlo updates that involve potentials or box updates.
--`potential::Union{Function, Nothing} = nothing`: Function for calculating potentials for
-    particles in the system, taking the particle collection as the first argument and the
-    index of the particle as the second argument. If set to `nothing`, no potential is
-    calculated for the particles in addition to their pair interaction.
--`pairpotential::Union{Function, Nothing} = nothing`: Function for calculating potentials
-    for pairs of particles, defining the interaction of the particles. If set to `nothing`,
-    particles interact via volume exclusion, i.e. hard particle interactions.
+Holds all simulation information.
 """
 mutable struct HPMCSimulation{F<:AbstractFloat}
     particles::ParticleCollection
@@ -60,6 +31,43 @@ mutable struct HPMCSimulation{F<:AbstractFloat}
     numtype::DataType
 end
 
+"""
+    HPMCSimulation(count, sidenum, radius, boxsize; boxshear=0, seed=-1, gpu=false, double=false, beta=1, potential=nothing, pairpotential=nothing)
+    HPMCSimulation(particles; ...)
+
+Make simulation structure containing all the information about the system.
+
+The first method makes particle collection (for now, only regualr polygons) with random
+initial configuration (made with`undef` arrays to be exact), while the second takes the
+particle collection as input.
+
+Parameters `beta`, maximum transtational move radius `move_radius`, and maximum rotation
+angle `rotation_span` can be set by the user safely after the simulation structure is built.
+
+# Arguments
+-`particles::ParticleCollection`: Pre-built particle collection passed to the simulation.
+    For now only accepts `RegularPolygons`.
+-`count::Integer`: the number of particles.
+-`sidenum::Integer`: the number of sides of the regular polygons.
+-`radius::Real`: the radius of the particles.
+-`boxsize::Tuple{<:Real, <:Real}`: the dimensions of the simulation box.
+-`boxshear::Real = 0`: the tangent of the shear angle of the box, defined as the complement
+    of the complement of the accute angle of the box parallelogram.
+-`seed::Integer = -1`: The seed for initializing the random generator. If set to -1, a
+    random seed will be passed to the generator.
+-`gpu::Bool = false`: whether to use CUDA gpu acceleration or not.
+-`double::Bool = false`: whether to use double-precision floating-point numbers for
+    calculations or single-presision ones.
+-`beta::Real = 1`: the inverse temperature of the system (more precisely, ``1 / k_B T``),
+    used for the Monte Carlo updates that involve potentials or box updates.
+-`potential::Union{Function, Nothing} = nothing`: Function for calculating potentials for
+    particles in the system, taking the particle collection as the first argument and the
+    index of the particle as the second argument. If set to `nothing`, no potential is
+    calculated for the particles in addition to their pair interaction.
+-`pairpotential::Union{Function, Nothing} = nothing`: Function for calculating potentials
+    for pairs of particles, defining the interaction of the particles. If set to `nothing`,
+    particles interact via volume exclusion, i.e. hard particle interactions.
+"""
 function HPMCSimulation(count::Integer, sidenum::Integer, radius::Real,
         boxsize::Tuple{<:Real, <:Real}; boxshear::Real = 0, seed::Integer = -1,
         gpu::Bool = false, double::Bool = false, beta::Real = 1,

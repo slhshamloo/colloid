@@ -1,3 +1,8 @@
+"""
+    RegularPolygonsSnapshot
+
+Structure for holding system information in one time step of the simulation.
+"""
 struct RegularPolygonsSnapshot
     sidenum::Integer
     radius::Real
@@ -8,6 +13,12 @@ struct RegularPolygonsSnapshot
     time::Integer
 end
 
+
+"""
+    RegularPolygonsSnapshot
+
+Structure for holding system information in multiple time steps of the simulation.
+"""
 struct RegularPolygonsTrajectory
     sidenum::Integer
     radius::Real
@@ -18,15 +29,30 @@ struct RegularPolygonsTrajectory
     times::AbstractVector
 end
 
+"""
+    RegularPolygonsSnapshot(particles::RegularPolygons)
+
+Convert particle collection into snapshot.
+"""
 RegularPolygonsSnapshot(particles::RegularPolygons) = CUDA.@allowscalar(
     RegularPolygonsSnapshot(particles.sidenum, particles.radius, particles.boxshear[],
         Tuple(particles.boxsize), Array(particles.centers), Array(particles.angles), 0))
 
-RegularPolygons(snapshot::RegularPolygonsSnapshot; gpu=false) =
+"""
+    RegularPolygons(snapshot::RegularPolygonsSnapshot; gpu=false)
+
+Convert snapshot into particle collection.
+"""
+RegularPolygons(snapshot::RegularPolygonsSnapshot; gpu::Bool = false) =
     RegularPolygons{eltype(snapshot.centers)}(
         snapshot.sidenum, snapshot.radius, snapshot.boxsize,
         snapshot.centers, snapshot.angles; gpu=gpu, boxshear=snapshot.boxshear)
 
+"""
+    RegularPolygonsSnapshot(filepath, frame)
+
+Load `frame` from `filepath` into a snapshot.
+"""
 function RegularPolygonsSnapshot(filepath::String, frame::Integer)
     if !endswith(filepath, ".jld2")
         filepath *= ".jld2"
@@ -38,6 +64,11 @@ function RegularPolygonsSnapshot(filepath::String, frame::Integer)
     end
 end
 
+"""
+    RegularPolygonsSnapshot(filepath)
+
+Load every frame from `filepath` into a trajectory.
+"""
 function RegularPolygonsTrajectory(filepath::String)
     if !endswith(filepath, ".jld2")
         filepath *= ".jld2"
@@ -73,6 +104,11 @@ function RegularPolygonsTrajectory(filepath::String)
     end
 end
 
+"""
+    RegularPolygonsSnapshot(filepath, frames)
+
+Load `frames` from `filepath` into a trajectory.
+"""
 function RegularPolygonsTrajectory(filepath::String, frames::OrdinalRange)
     if !endswith(filepath, ".jld2")
         filepath *= ".jld2"
@@ -100,6 +136,11 @@ function RegularPolygonsTrajectory(filepath::String, frames::OrdinalRange)
     end
 end
 
+"""
+    framecount(filepath)
+
+count the number of frames in trajectory saved in `filepath`.
+"""
 function framecount(filepath::String)
     if !endswith(filepath, ".jld2")
         filepath *= ".jld2"
@@ -139,6 +180,11 @@ Base.getindex(trajectory::RegularPolygonsTrajectory, frames::OrdinalRange) =
 @inline particlearea(snapshot::RegularPolygonsSnapshot) = (
     0.5 * snapshot.sidenum * snapshot.radius^2 * sin(2π / snapshot.sidenum))
 
+"""
+    calculate_local_order(trajectory, type, typeparams...; gpu=false, numtype=Float32, typekeywords...)
+
+Calculate order parameters from `trajectory` structure.
+"""
 function calculate_local_order(trajectory::RegularPolygonsTrajectory,
         type::String, typeparams...; gpu::Bool = false, numtype::DataType = Float32,
         typekeywords...)
@@ -161,6 +207,11 @@ function calculate_local_order(trajectory::RegularPolygonsTrajectory,
     return orders
 end
 
+"""
+    calculate_local_order(filepath, frame, type, typeparams...; gpu=false, numtype=Float32, typekeywords...)
+
+Calculate order parameters in `frames` from trajectory recorded in `filepath`.
+"""
 function calculate_local_order(filepath::String, frames::OrdinalRange, 
         type::String, typeparams...; gpu::Bool = false, numtype::DataType = Float32)
     if type == "nematic"
@@ -175,7 +226,9 @@ function calculate_local_order(filepath::String, frames::OrdinalRange,
         particles = RegularPolygons(RegularPolygonsSnapshot(filepath, frame), gpu=gpu)
         cell_list = gpu ? CuCellList(particles) : SeqCellList(particles)
         if type == "katic"
-            push!(orders, katic_order(particles, cell_list, typeparams[1]; numtype=numtype))
+            push!(orders, katic_order(particles, cell_list, typeparams...; numtype=numtype))
+        elseif type == "solidliquid"
+            push!(orders, solidliquid(particles, cell_list, typeparams...))
         end
     end
     return orders

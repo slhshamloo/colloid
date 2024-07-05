@@ -46,6 +46,11 @@ function recordfile!(sim::HPMCSimulation, recorder::TrajectoryRecorder, timestep
     end
 end
 
+"""
+    finalize!(recorder)
+
+Save every frame of the recorder trajectory in on file and remove temporary files.
+"""
 function finalize!(recorder::TrajectoryRecorder)
     jldopen(recorder.filepath * ".jld2", "w+") do masterfile
         jldopen(recorder.filepath * "/constants.jld2") do constfile
