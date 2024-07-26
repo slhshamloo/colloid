@@ -85,12 +85,16 @@ function has_overlap(particles::RegularPolygons, cell_list::SeqCellList)
                     return true
                 end
             end
-            if i % 2 == 0
+            if j % 2 == 0
                 if has_diagonal_overlap(particles, cell_list, i, j, idx)
                     return true
                 end
             end
         end
+    end
+    if (size(cell_list.cells, 2) % 2 != 0
+            && has_diagonal_overlap_on_border(particles, cell_list))
+        return true
     end
     return false
 end
@@ -101,25 +105,28 @@ end
 Count the number of overlaps between the particles in the system.
 """
 function count_overlaps(particles::RegularPolygons, cell_list::SeqCellList)
-    overlap_count = 0
+    overlapcount = 0
     for cell in CartesianIndices(cell_list.cells)
         i, j = Tuple(cell)
         for m in eachindex(cell_list.cells[cell])
             idx = cell_list.cells[cell][m]
             for n in m+1:length(cell_list.cells[cell])
                 if is_overlapping(particles, idx, cell_list.cells[cell][n])
-                    overlap_count += 1
+                    overlapcount += 1
                 end
             end
             if (i + j) % 2 == 0
-                overlap_count += count_orthogonal_overlaps(particles, cell_list, i, j, idx)
+                overlapcount += count_orthogonal_overlaps(particles, cell_list, i, j, idx)
             end
-            if i % 2 == 0
-                overlap_count += count_diagonal_overlaps(particles, cell_list, i, j, idx)
+            if j % 2 == 0
+                overlapcount += count_diagonal_overlaps(particles, cell_list, i, j, idx)
             end
         end
     end
-    return overlap_count
+    if size(cell_list.cells, 2) % 2 != 0
+        overlapcount += count_border_diagonal_overlaps(particles, cell_list)
+    end
+    return overlapcount
 end
 
 @inline function has_orthogonal_overlap(particles::RegularPolygons, cell_list::SeqCellList,
@@ -132,10 +139,14 @@ end
         if is_overlapping(particles, m, n) return true end
     end
     for n in cell_list.cells[(i == lx ? 1 : i + 1), j]
-        if is_overlapping(particles, m, n) return true end
+        if lx % 2 != 0 || i != lx
+            if is_overlapping(particles, m, n) return true end
+        end
     end
     for n in cell_list.cells[i, (j == ly ? 1 : j + 1)]
-        if is_overlapping(particles, m, n) return true end
+        if ly % 2 != 0 || j != ly
+            if is_overlapping(particles, m, n) return true end
+        end
     end
     return false
 end
@@ -158,6 +169,22 @@ end
     return false
 end
 
+@inline function has_diagonal_overlap_on_border(
+        particles::RegularPolygons, cell_list::SeqCellList)
+    lx = size(cell_list.cells, 1)
+    for i in 1:lx
+        for m in cell_list.cells[i, end]
+            for n in cell_list.cells[(i == lx ? 1 : i + 1), 1]
+                if is_overlapping(particles, m, n) return true end
+            end
+            for n in cell_list.cells[(i == 1 ? lx : i - 1), 1]
+                if is_overlapping(particles, m, n) return true end
+            end
+        end
+    end
+    return false
+end
+
 @inline function count_orthogonal_overlaps(particles::RegularPolygons, cell_list::SeqCellList,
                                            i::Integer, j::Integer, m::Integer)
     count = 0
@@ -169,10 +196,14 @@ end
         if is_overlapping(particles, m, n) count += 1 end
     end
     for n in cell_list.cells[(i == lx ? 1 : i + 1), j]
-        if is_overlapping(particles, m, n) count += 1 end
+        if lx % 2 != 0 || i != lx
+            if is_overlapping(particles, m, n) count += 1 end
+        end
     end
     for n in cell_list.cells[i, (j == ly ? 1 : j + 1)]
-        if is_overlapping(particles, m, n) count += 1 end
+        if ly % 2 != 0 || j != ly
+            if is_overlapping(particles, m, n) count += 1 end
+        end
     end
     return count
 end
@@ -192,6 +223,23 @@ end
     end
     for n in cell_list.cells[(i == 1 ? lx : i - 1), (j == ly ? 1 : j + 1)]
         if is_overlapping(particles, m, n) count += 1 end
+    end
+    return count
+end
+
+@inline function count_border_diagonal_overlaps(
+        particles::RegularPolygons, cell_list::SeqCellList)
+    count = 0
+    lx = size(cell_list.cells, 1)
+    for i in 1:lx
+        for m in cell_list.cells[i, end]
+            for n in cell_list.cells[(i == lx ? 1 : i + 1), 1]
+                if is_overlapping(particles, m, n) count += 1 end
+            end
+            for n in cell_list.cells[(i == 1 ? lx : i - 1), 1]
+                if is_overlapping(particles, m, n) count += 1 end
+            end
+        end
     end
     return count
 end
