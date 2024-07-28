@@ -13,7 +13,7 @@ struct CuCellList{T<:Real, A<:AbstractArray, M<:AbstractMatrix,
 end
 
 """
-    CuCellList(particles[, shift]; maxwidth=0, max_particles_per_cell=20)
+    CuCellList(particles[, shift]; maxwidth = 2 * √2 * particles.radius, max_particles_per_cell=20)
 
 Make a cell list structure for the GPU.
 
@@ -32,8 +32,8 @@ function CuCellList(particles::RegularPolygons, shift::AbstractArray = [0.0f0, 0
                     maxwidth::Real = 2 * √2 * particles.radius,
                     max_particles_per_cell::Integer=20)
     boxsize = Array(particles.boxsize)
-    width = (max(boxsize[1] / ceil(boxsize[1] / maxwidth), 2 * particles.radius),
-             max(boxsize[2] / ceil(boxsize[2] / maxwidth), 2 * particles.radius))
+    width = (boxsize[1] / ceil(boxsize[1] / maxwidth),
+             boxsize[2] / ceil(boxsize[2] / maxwidth))
     m, n = Int(boxsize[1] ÷ width[1]), Int(boxsize[2] ÷ width[2])
     cells = Array{Int32, 3}(undef, max_particles_per_cell, m, n)
     counts = zeros(Int32, m, n)
@@ -82,8 +82,10 @@ end
 function shift_cells!(particles::RegularPolygons, cell_list::CuCellList,
                       direction::Tuple{<:Integer, <:Integer}, shift::Real)
     CUDA.allowscalar() do
-        cell_list.shift[1] += direction[1] * shift
-        cell_list.shift[2] += direction[2] * shift
+        cell_list.shift[1] = mod(
+            cell_list.shift[1] + direction[1] * shift, cell_list.width[1])
+        cell_list.shift[2] = mod(
+            cell_list.shift[2] + direction[2] * shift, cell_list.width[2])
         cell_list.counts .= 0
         @cuda(threads=numthreads, blocks=particlecount(particles)÷numthreads+1,
             build_cells_parallel!(particles, cell_list.cells, cell_list.counts,
@@ -96,12 +98,12 @@ function count_overlaps(particles::RegularPolygons, cell_list::CuCellList)
     groupcount = 9 * maxcount
     groups_per_block = numthreads ÷ groupcount
     numblocks = length(cell_list.counts) ÷ groups_per_block + 1
-    overlapcount = CUDA.zeros(Int32)
+    overlapcount = CUDA.zeros(Int32) # zero dimensional array, acts like simple pointer
     @cuda(threads=numthreads, blocks=numblocks,
           shmem = groups_per_block * groupcount * sizeof(Int32),
           count_overlaps_parallel!(particles, cell_list, overlapcount, maxcount,
                                    groupcount, groups_per_block))
-    return CUDA.@allowscalar overlapcount[]
+    return CUDA.@allowscalar overlapcount[] ÷ 2
 end
 
 function has_overlap(particles::RegularPolygons, cell_list::CuCellList)
