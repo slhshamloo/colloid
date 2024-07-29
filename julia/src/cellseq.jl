@@ -51,16 +51,25 @@ end
 
 function has_overlap(particles::RegularPolygons, cell_list::SeqCellList,
                      idx::Integer, i::Integer, j::Integer)   
-    for n in cell_list.cells[i, j]
-        if n != idx && is_overlapping(particles, n, idx)
-            return true
+    for neighbor_cell in (
+            cell_list.cells[mod(i - 2, size(cell_list.cells, 1)) + 1,
+                            mod(j - 2, size(cell_list.cells, 2)) + 1],
+            cell_list.cells[mod(i - 2, size(cell_list.cells, 1)) + 1, j],
+            cell_list.cells[mod(i - 2, size(cell_list.cells, 1)) + 1,
+                            mod(j, size(cell_list.cells, 2)) + 1],
+            cell_list.cells[i, mod(j - 2, size(cell_list.cells, 2)) + 1],
+            cell_list.cells[i, j],
+            cell_list.cells[i, mod(j, size(cell_list.cells, 2)) + 1],
+            cell_list.cells[mod(i, size(cell_list.cells, 1)) + 1,
+                            mod(j - 2, size(cell_list.cells, 2)) + 1],
+            cell_list.cells[mod(i, size(cell_list.cells, 1)) + 1, j],
+            cell_list.cells[mod(i, size(cell_list.cells, 1)) + 1,
+                            mod(j, size(cell_list.cells, 2)) + 1])
+        for neighbor in neighbor_cell
+            if neighbor != idx && is_overlapping(particles, idx, neighbor)
+                return true
+            end
         end
-    end
-    if has_orthogonal_overlap(particles, cell_list, i, j, idx)
-        return true
-    end
-    if has_diagonal_overlap(particles, cell_list, i, j, idx)
-        return true
     end
     return false
 end
@@ -320,17 +329,19 @@ end
                             mod(j - 2, size(cell_list.counts, 2)) + 1],
             cell_list.cells[mod(i - 2, size(cell_list.counts, 1)) + 1, j],
             cell_list.cells[mod(i - 2, size(cell_list.counts, 1)) + 1,
-                            mod(j, size(cell_list.counts, 1)) + 1],
-            cell_list.cells[i, mod(j - 2, size(cell_list.counts, 1)) + 1],
-            cell_list.cells[i, j] - 1,
-            cell_list.cells[i, mod(j, size(cell_list.counts, 1)) + 1],
+                            mod(j, size(cell_list.counts, 2)) + 1],
+            cell_list.cells[i, mod(j - 2, size(cell_list.counts, 2)) + 1],
+            cell_list.cells[i, j],
+            cell_list.cells[i, mod(j, size(cell_list.counts, 2)) + 1],
             cell_list.cells[mod(i, size(cell_list.counts, 1)) + 1,
                             mod(j - 2, size(cell_list.counts, 2)) + 1],
             cell_list.cells[mod(i, size(cell_list.counts, 1)) + 1, j],
             cell_list.cells[mod(i, size(cell_list.counts, 1)) + 1,
-                            mod(j, size(cell_list.counts, 1)) + 1])
+                            mod(j, size(cell_list.counts, 2)) + 1])
         for neighbor in neighbor_cell
-            potsum += pairpotential(particles, idx, neighbor)
+            if neighbor != idx
+                potsum += pairpotential(particles, idx, neighbor)
+            end
         end
     end
     return potsum
